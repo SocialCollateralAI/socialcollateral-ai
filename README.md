@@ -6,7 +6,7 @@ Menyediakan API untuk Visualisasi Graf (Sigma.js) dan Analisis Multi-Lensa (NLP,
 
   
 
-## Status: READY FOR DEPLOYMENT
+## READY FOR DEPLOYMENT
 
 ### Repositori Struktur
 
