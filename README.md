@@ -23,7 +23,9 @@ Menyediakan API untuk Visualisasi Graf (Sigma.js) dan Analisis Multi-Lensa (NLP,
 
 Base URL Lokal: http://localhost:8000/api/v1
 
-Base URL Cloud: https://\[LINK\_DEPLOY\_KAMU\].onrender.com/api/v1
+Base URL Cloud: https://socialcollateral-ai-production.up.railway.app/api/v1
+
+Base URL Swagger / API Docs: https://socialcollateral-ai-production.up.railway.app/docs
 
 | **Method** | **Endpoint** | **Deskripsi** |
 | --- | --- | --- |
