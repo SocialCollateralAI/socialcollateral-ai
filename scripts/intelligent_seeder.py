@@ -435,7 +435,7 @@ def process_data():
             rel = os.path.relpath(img_path, IMAGE_DIR)
         except Exception:
             rel = os.path.basename(img_path)
-        img_url = f"data/{rel.replace(os.sep, '/')}"
+        img_url = f"data/images/{rel.replace(os.sep, '/')}"
         # Debug: show mapping from filesystem path -> public URL
         try:
             print(f"   📷 Image chosen: {img_path} -> {img_url}")
