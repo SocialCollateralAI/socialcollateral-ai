@@ -384,9 +384,16 @@ def process_data():
         home_img_path = home_images[group_counter % len(home_images)]
         bisnis_img_path = bisnis_images[group_counter % len(bisnis_images)]
         
-        # Generate URLs
-        home_img_url = f"data/images/home/{os.path.basename(home_img_path)}" if "placeholder" not in home_img_path else "placeholder_home.jpg"
-        bisnis_img_url = f"data/images/bisnis/{os.path.basename(bisnis_img_path)}" if "placeholder" not in bisnis_img_path else "placeholder_bisnis.jpg"
+        # Generate URLs - check if files actually exist
+        if "placeholder" not in home_img_path and os.path.exists(home_img_path):
+            home_img_url = f"data/images/home/{os.path.basename(home_img_path)}"
+        else:
+            home_img_url = "placeholder_home.jpg"
+            
+        if "placeholder" not in bisnis_img_path and os.path.exists(bisnis_img_path):
+            bisnis_img_url = f"data/images/bisnis/{os.path.basename(bisnis_img_path)}"
+        else:
+            bisnis_img_url = "placeholder_bisnis.jpg"
 
         # --- B. AI INTELLIGENCE (Hybrid) ---
         ai_data = {}
@@ -404,8 +411,12 @@ def process_data():
                 )
                 inputs = [prompt]
                 # Use home image for AI analysis (as it's more relevant for risk assessment)
-                if "placeholder" not in home_img_path:
-                    inputs.append(Image.open(home_img_path))
+                if "placeholder" not in home_img_path and os.path.exists(home_img_path):
+                    try:
+                        inputs.append(Image.open(home_img_path))
+                    except Exception as img_err:
+                        print(f"      ⚠️ Legacy image processing error: {img_err}")
+                        # Continue without image
 
                 # resp = model.generate_content(
                 #     inputs, generation_config={"response_mime_type": "application/json"}
@@ -417,10 +428,25 @@ def process_data():
                 vertex_inputs.append(prompt)
 
                 # ➕ Add Image (if exists) - use home image for risk analysis
-                if "placeholder" not in home_img_path:
-                    vertex_inputs.append(
-                        Part.from_image(Image.open(home_img_path))
-                    )
+                if "placeholder" not in home_img_path and os.path.exists(home_img_path):
+                    try:
+                        # Determine MIME type based on file extension
+                        ext = os.path.splitext(home_img_path)[1].lower()
+                        mime_type = "image/jpeg"
+                        if ext in ['.png']:
+                            mime_type = "image/png"
+                        elif ext in ['.jpg', '.jpeg']:
+                            mime_type = "image/jpeg"
+                        
+                        # Read image as bytes for Vertex AI
+                        with open(home_img_path, 'rb') as img_file:
+                            image_data = img_file.read()
+                        vertex_inputs.append(
+                            Part.from_data(data=image_data, mime_type=mime_type)
+                        )
+                    except Exception as img_err:
+                        print(f"      ⚠️ Image processing error: {img_err}")
+                        # Continue without image
 
                 # 🔥 GENERATE WITH VERTEX
                 resp = model.generate_content(
