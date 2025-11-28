@@ -28,10 +28,7 @@ print()
 
 # Model options with vision capability flags (us-central1 optimized)
 MODEL_OPTIONS = [
-    {"name": "gemini-1.5-flash", "vision": False, "description": "Fast model, text-only (most reliable)"},
-    {"name": "gemini-1.5-pro", "vision": True, "description": "Pro model with vision"},
-    {"name": "gemini-pro", "vision": False, "description": "Basic pro model"},
-    {"name": "gemini-1.0-pro", "vision": False, "description": "Legacy v1.0 text model"}
+    {"name": "gemini-2.5-flash-image", "vision": True, "description": "Fast model, text-only (most reliable)"},
 ]
 
 print("🌍 Note: Switched to us-central1 region for better Gemini model availability")
@@ -63,10 +60,14 @@ for model_info in MODEL_OPTIONS:
 
 if not model:
     print("🚨 No working model found!")
-    print("💡 Possible solutions:")
-    print("   1. Enable Vertex AI API: gcloud services enable aiplatform.googleapis.com")
-    print("   2. Check region availability for Gemini models")
-    print("   3. Verify project permissions")
+    print("💡 Try these solutions in order:")
+    print("   1. Enable required APIs:")
+    print("      gcloud services enable aiplatform.googleapis.com")
+    print("      gcloud services enable generativelanguage.googleapis.com")
+    print("   2. Check if your project has Gemini access:")
+    print("      https://console.cloud.google.com/vertex-ai/generative")
+    print("   3. Try the Gemini API instead of Vertex AI")
+    print("   4. For now, using smart mock mode (realistic fake data)")
     print("🤖 Continuing with smart mock mode (no AI analysis)...")
     
     # Create a dummy model object that will always fail gracefully
@@ -82,7 +83,7 @@ RAW_DATA_DIR = "samples"
 IMAGE_DIR = "data/images"
 OUTPUT_JSON = "data/mock_db.json"
 GCS_BUCKET = None  # if set, upload output to this GCS bucket
-AI_DELAY = 1.0
+AI_DELAY = 0.1  # Fast mode
 
 # Auto-configure image sending based on model capability
 SEND_IMAGES = selected_model_info["vision"] if selected_model_info else False
@@ -103,55 +104,21 @@ AI_LIMIT = 1000  # 20 Node pertama pakai Real AI, sisanya Smart Mockup
 # - HEALTHY: Makin bagus performance → Makin besar → Prioritas modal
 # - TOXIC: Makin buruk performance → Makin besar → Butuh perhatian segera!
 
-# Setup Gemini
-# if not GOOGLE_API_KEY:
-#     print("⚠️  PERINGATAN: API Key belum diisi. AI calls will be skipped.")
-# else:
-#     genai.configure(api_key=GOOGLE_API_KEY)
-
-# model_names = [
-#     "gemini-pro-latest",
-#     "gemini-1.5-flash",  # Try flash first as it's more widely available
-#     "gemini-1.0-pro-vision-latest",
-#     "gemini-1.0-pro-latest", 
-#     "gemini-1.0-pro",
-#     "gemini-pro-vision",
-# ]
-# model = None
-# for mn in model_names:
-#     try:
-#         # Try to initialize model; don't run a test generate here in containerized env
-#         candidate = genai.GenerativeModel(mn)
-#         model = candidate
-#         print(f"✅ Google AI model initialized: {mn}")
-#         break
-#     except Exception as e:
-#         print(f"⚠️ Model {mn} not available or unsupported: {e}")
-
-# if model is None:
-#     print("⚠️ No Gemini model initialized. AI calls will be skipped or will fall back.")
-#     AI_AVAILABLE = False
-# else:
-#     AI_AVAILABLE = True
+# Legacy Google AI setup (cleaned up)
 
 # ==========================================
 # 🧠 AI PROMPT (Hanya untuk Real AI)
 # ==========================================
 GROUP_ANALYSIS_PROMPT = """
-Role: Senior Risk Analyst Microfinance Indonesia.
-Data Kelompok:
-{group_text}
-
-Tugas: Analisis profil risiko kelompok ini.
-
-Output JSON (Strict JSON, no markdown):
+Analisis cepat: {group_text}
+Output JSON:
 {{
-  "risk_badge": "LOW RISK / MED RISK / HIGH RISK",
-  "trust_score": (Integer 0-100),
-  "sentiment_text": "Satu kalimat ringkas bahasa Indonesia tentang sentimen kelompok.",
-  "asset_condition": "GOOD / AVERAGE / POOR",
-  "asset_tags": ["Tag1", "Tag2"],
-  "repayment_prediction": (Integer 0-100)
+  "risk_badge": "LOW RISK/MED RISK/HIGH RISK",
+  "trust_score": 0-100,
+  "sentiment_text": "Ringkas sentimen kelompok",
+  "asset_condition": "GOOD/AVERAGE/POOR",
+  "asset_tags": ["tag1", "tag2"],
+  "repayment_prediction": 0-100
 }}
 """
 
@@ -179,7 +146,11 @@ def run_vertex_ai(prompt, image_path=None):
 
         resp = model.generate_content(
             parts,
-            generation_config={"response_mime_type": "application/json"},
+            generation_config={
+                "response_mime_type": "application/json",
+                "max_output_tokens": 200,
+                "temperature": 0.1
+            },
             stream=False
         )
 
@@ -354,8 +325,7 @@ def generate_modal_recommendation(trust_score, risk_status, business_type, node_
 # 🚀 DATA PROCESSOR
 # ==========================================
 def process_data():
-    global AI_AVAILABLE
-    print(f"🚀 MEMULAI SEEDING FULL STRUCTURE ({MAX_NODES} Nodes)...")
+    print(f"🚀 FAST SEEDING ({MAX_NODES} Nodes)...")
 
     # 1. Load CSV
     def load_csv_safe(name):
@@ -503,39 +473,15 @@ def process_data():
         # --- B. AI INTELLIGENCE (Hybrid) ---
         ai_data = {}
 
-        # Cek apakah pakai AI atau Mockup
-        # if (
-        #     group_counter < AI_LIMIT
-        #     and GOOGLE_API_KEY != "MASUKKAN_API_KEY_ANDA_DISINI"
-        # ):
-        #     # 🔴 REAL AI PATH
-        #     try:
-        #         print(f"   ✨ AI Processing {group_id}...")
-        #         prompt = GROUP_ANALYSIS_PROMPT.format(
-        #             group_text=f"ID: {group_id}, DPD: {avg_dpd}, Biz: {common_biz}, Loan: {total_loan}"
-        #         )
-        #         inputs = [prompt]
-        #         if img_path != "placeholder.jpg":
-        #             inputs.append(Image.open(img_path))
-
-        #         resp = model.generate_content(
-        #             inputs, generation_config={"response_mime_type": "application/json"}
-        #         )
-        #         ai_data = json.loads(resp.text)
-        #         time.sleep(1)
-        #     except Exception as e:
-        #         print(f"      ⚠️ AI Error: {e}")
-        #         # Fallback ke mockup jika AI error
+        # AI Analysis (Fast Mode)
         if group_counter < AI_LIMIT:
-            print(f"✨ Vertex AI: {group_id}")
+            print(f"⚡ AI: {group_id}")
             prompt = GROUP_ANALYSIS_PROMPT.format(
-                group_text=f"ID {group_id}, DPD {avg_dpd}, Biz {common_biz}, Loan {total_loan}"
+                group_text=f"DPD:{avg_dpd} Biz:{common_biz} Loan:{int(total_loan)}"
             )
-            # Only attach image bytes when SEND_IMAGES is True. Many Gemini
-            # text/flash models are not vision-capable and will return a
-            # Precondition check failed (400) if an image part is included.
             ai_data = run_vertex_ai(prompt, image_path=img_path if SEND_IMAGES else None)
-
+            if ai_data:
+                time.sleep(AI_DELAY)  # Throttle for rate limits
 
         if not ai_data:
             # 🔵 SMART MOCKUP PATH (Fallback Cerdas)
