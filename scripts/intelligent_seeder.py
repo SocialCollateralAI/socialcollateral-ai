@@ -5,10 +5,6 @@ import os
 import random
 import time
 from datetime import datetime
-import concurrent.futures
-from threading import Lock
-import asyncio
-from functools import lru_cache
 
 # import google.generativeai as genai
 from vertexai.preview.generative_models import GenerativeModel, Part
@@ -32,15 +28,12 @@ RAW_DATA_DIR = os.getenv("RAW_DATA_DIR", "samples")
 IMAGE_DIR = os.getenv("IMAGE_DIR", "data/images")
 OUTPUT_JSON = os.getenv("OUTPUT_JSON", "data/mock_db.json")
 GCS_BUCKET = os.getenv("GCS_BUCKET")  # if set, upload output to this GCS bucket
-AI_DELAY = float(os.getenv("AI_DELAY", "0.01"))  # Reduced from 0.1 to 0.01
-MAX_WORKERS = int(os.getenv("MAX_WORKERS", "5"))  # Concurrent processing
-BATCH_SIZE = int(os.getenv("BATCH_SIZE", "3"))  # Process in batches
+AI_DELAY = float(os.getenv("AI_DELAY", "0.1"))
 
 # --- SETTINGAN DEMO ---
 GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
 MAX_NODES = 10  # Total Node yang dibuat
-AI_LIMIT = 1000  # Node yang menggunakan Real AI
-ENABLE_AI_PARALLEL = True  # Toggle parallel processing
+AI_LIMIT = 1000  # 20 Node pertama pakai Real AI, sisanya Smart Mockup
 
 # --- VISUAL SIZING SYSTEM ---
 # 🎯 SISTEM UKURAN NODE BERDASARKAN URGENSI PERHATIAN:
@@ -78,18 +71,6 @@ if model is None:
     AI_AVAILABLE = False
 else:
     AI_AVAILABLE = True
-
-# Image cache untuk menghindari loading berulang
-@lru_cache(maxsize=100)
-def load_image_cached(img_path):
-    """Load and cache images to avoid repeated file I/O"""
-    try:
-        return Image.open(img_path)
-    except:
-        return None
-
-# Thread lock untuk model access
-model_lock = Lock()
 
 # ==========================================
 # 🧠 AI PROMPT (Hanya untuk Real AI)
@@ -256,45 +237,6 @@ def generate_modal_recommendation(trust_score, risk_status, business_type, node_
         return f"🔴 TIDAK LAYAK: Kelompok {business_type} tidak direkomendasikan untuk modal. Fokus recovery dulu."
 
 
-def process_ai_single(group_data_tuple):
-    """🚀 OPTIMIZED: Process single group with AI - thread-safe"""
-    group_id, avg_dpd, common_biz, total_loan, img_path = group_data_tuple
-    
-    try:
-        prompt = GROUP_ANALYSIS_PROMPT.format(
-            group_text=f"ID: {group_id}, DPD: {avg_dpd}, Biz: {common_biz}, Loan: {total_loan}"
-        )
-        
-        vertex_inputs = [prompt]
-        
-        # Load cached image efficiently
-        if img_path != "placeholder.jpg" and os.path.exists(img_path):
-            cached_img = load_image_cached(img_path)
-            if cached_img:
-                vertex_inputs.append(Part.from_image(cached_img))
-        
-        # Thread-safe model access with optimized config
-        with model_lock:
-            resp = model.generate_content(
-                vertex_inputs,
-                generation_config={
-                    "max_output_tokens": 512,  # Further reduced for speed
-                    "temperature": 0.1,  # Lower temperature for faster, more consistent results  
-                    "top_p": 0.8,
-                    "top_k": 20,
-                    "response_mime_type": "application/json"
-                }
-            )
-            
-            result = json.loads(resp.text)
-            print(f"   ✅ AI Completed {group_id}")
-            return group_id, result
-                
-    except Exception as e:
-        print(f"   ⚠️ AI Error {group_id}: {str(e)[:50]}...")
-        return group_id, None
-
-
 # ==========================================
 # 🚀 DATA PROCESSOR
 # ==========================================
@@ -354,13 +296,22 @@ def process_data():
     all_cust_ids = list(cust_map.keys())
     processed_groups = {}
 
-    images = (
-        glob.glob(f"{IMAGE_DIR}/*.jpg")
-        + glob.glob(f"{IMAGE_DIR}/*.jpeg")
-        + glob.glob(f"{IMAGE_DIR}/*.png")
+    # Separate home and business images
+    home_images = (
+        glob.glob(f"{IMAGE_DIR}/home/*.jpg")
+        + glob.glob(f"{IMAGE_DIR}/home/*.jpeg")
+        + glob.glob(f"{IMAGE_DIR}/home/*.png")
     )
-    if not images:
-        images = ["placeholder.jpg"]
+    bisnis_images = (
+        glob.glob(f"{IMAGE_DIR}/bisnis/*.jpg")
+        + glob.glob(f"{IMAGE_DIR}/bisnis/*.jpeg")
+        + glob.glob(f"{IMAGE_DIR}/bisnis/*.png")
+    )
+    
+    if not home_images:
+        home_images = ["placeholder_home.jpg"]
+    if not bisnis_images:
+        bisnis_images = ["placeholder_bisnis.jpg"]
 
     group_counter = 0
 
@@ -429,34 +380,81 @@ def process_data():
             lat += (random.random() - 0.5) * 0.05
             lng += (random.random() - 0.5) * 0.05
 
-        # Image
-        img_path = images[group_counter % len(images)]
-        img_url = f"data/images/{os.path.basename(img_path)}"
+        # Separate images for home and business
+        home_img_path = home_images[group_counter % len(home_images)]
+        bisnis_img_path = bisnis_images[group_counter % len(bisnis_images)]
+        
+        # Generate URLs
+        home_img_url = f"data/images/home/{os.path.basename(home_img_path)}" if "placeholder" not in home_img_path else "placeholder_home.jpg"
+        bisnis_img_url = f"data/images/bisnis/{os.path.basename(bisnis_img_path)}" if "placeholder" not in bisnis_img_path else "placeholder_bisnis.jpg"
 
-        # --- B. PREPARE AI DATA COLLECTION ---
-        # Store for later batch processing
-        ai_processing_queue = getattr(process_data, 'ai_queue', [])
-        
-        # Add to AI queue if should use AI
-        if (group_counter < AI_LIMIT and GOOGLE_API_KEY != "MASUKKAN_API_KEY_ANDA_DISINI" and AI_AVAILABLE):
-            ai_processing_queue.append((group_id, avg_dpd, common_biz, total_loan, img_path))
-        
-        # Store queue back 
-        process_data.ai_queue = ai_processing_queue
-        
-        # Default AI data for initial structure (will be updated by AI if available)
-        base_trust = (
-            95 if risk_status == "HEALTHY"
-            else (70 if risk_status == "MEDIUM" else 40)
-        )
-        ai_data = {
-            "risk_badge": f"{risk_status} RISK",
-            "trust_score": base_trust,
-            "sentiment_text": f"Kelompok didominasi usaha {common_biz}, performa pembayaran {risk_status.lower()}.",
-            "asset_condition": "AVERAGE",
-            "asset_tags": ["Usaha Mikro", "Bangunan Permanen"],
-            "repayment_prediction": 98 if risk_status == "HEALTHY" else 60,
-        }
+        # --- B. AI INTELLIGENCE (Hybrid) ---
+        ai_data = {}
+
+        # Cek apakah pakai AI atau Mockup
+        if (
+            group_counter < AI_LIMIT
+            and GOOGLE_API_KEY != "MASUKKAN_API_KEY_ANDA_DISINI"
+        ):
+            # 🔴 REAL AI PATH
+            try:
+                print(f"   ✨ AI Processing {group_id}...")
+                prompt = GROUP_ANALYSIS_PROMPT.format(
+                    group_text=f"ID: {group_id}, DPD: {avg_dpd}, Biz: {common_biz}, Loan: {total_loan}"
+                )
+                inputs = [prompt]
+                # Use home image for AI analysis (as it's more relevant for risk assessment)
+                if "placeholder" not in home_img_path:
+                    inputs.append(Image.open(home_img_path))
+
+                # resp = model.generate_content(
+                #     inputs, generation_config={"response_mime_type": "application/json"}
+                # )
+                # ai_data = json.loads(resp.text)
+                vertex_inputs = []
+
+                # ➕ Add Text Prompt
+                vertex_inputs.append(prompt)
+
+                # ➕ Add Image (if exists) - use home image for risk analysis
+                if "placeholder" not in home_img_path:
+                    vertex_inputs.append(
+                        Part.from_image(Image.open(home_img_path))
+                    )
+
+                # 🔥 GENERATE WITH VERTEX
+                resp = model.generate_content(
+                    vertex_inputs,
+                    generation_config={
+                        "max_output_tokens": 2048,
+                        "temperature": 0.3,
+                        "response_mime_type": "application/json"
+                    }
+                )
+
+                ai_data = json.loads(resp.text)
+                time.sleep(AI_DELAY)
+                time.sleep(1)
+            except Exception as e:
+                print(f"      ⚠️ AI Error: {e}")
+                # Fallback ke mockup jika AI error
+
+        if not ai_data:
+            # 🔵 SMART MOCKUP PATH (Fallback Cerdas)
+            # Kita generate data seolah-olah ini dari AI
+            base_trust = (
+                95
+                if risk_status == "HEALTHY"
+                else (70 if risk_status == "MEDIUM" else 40)
+            )
+            ai_data = {
+                "risk_badge": f"{risk_status} RISK",
+                "trust_score": base_trust,
+                "sentiment_text": f"Kelompok didominasi usaha {common_biz}, performa pembayaran {risk_status.lower()}.",
+                "asset_condition": "AVERAGE",
+                "asset_tags": ["Usaha Mikro", "Bangunan Permanen"],
+                "repayment_prediction": 98 if risk_status == "HEALTHY" else 60,
+            }
 
         # --- C. CONSTRUCT JSON (FULL SCHEMA) ---
         # Ini bagian penting: Kita kembalikan semua field yang diminta FE
@@ -565,7 +563,7 @@ def process_data():
                         "access": "Paved",
                         "occupancy": "Occupied",
                         "assets": ai_data.get("asset_tags"),
-                        "img_url": img_url,
+                        "img_url": home_img_url,
                     },
                     "biz": {
                         "stability": "Permanent",
@@ -574,7 +572,7 @@ def process_data():
                         "status": "Active",
                         "digital": "QRIS",
                         "inventory": ["Full"],
-                        "img_url": img_url,
+                        "img_url": bisnis_img_url,
                     },
                 },
                 "prediction": {  # Wajib ada
@@ -587,7 +585,7 @@ def process_data():
                         "scenario": "Intervention",
                     },
                 },
-                "recommendation_text": f"Saran AI: {generate_modal_recommendation(trust_score, risk_status, common_biz, node_size)}",
+                "recommendation_text": generate_modal_recommendation(trust_score, risk_status, common_biz, node_size),
             },
             "decision": {
                 "last_audit": f"Agent {random.choice(['Budi', 'Sari'])}",
@@ -597,51 +595,7 @@ def process_data():
         }
 
         group_counter += 1
-        
-    # 3.5. PARALLEL AI PROCESSING (🚀 ULTRA OPTIMIZED)
-    ai_queue = getattr(process_data, 'ai_queue', [])
-    
-    if ai_queue and AI_AVAILABLE and ENABLE_AI_PARALLEL:
-        print(f"🚀 PARALLEL AI Processing {len(ai_queue)} groups with {MAX_WORKERS} workers...")
-        start_time = time.time()
-        
-        # Process with ThreadPoolExecutor for maximum speed
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            # Submit all AI tasks at once
-            future_to_group = {
-                executor.submit(process_ai_single, group_data): group_data[0] 
-                for group_data in ai_queue
-            }
-            
-            # Process results as they complete
-            ai_completed = 0
-            for future in concurrent.futures.as_completed(future_to_group, timeout=30):
-                try:
-                    group_id, ai_result = future.result()
-                    ai_completed += 1
-                    
-                    if ai_result and group_id in processed_groups:
-                        # Update with real AI data
-                        trust_score = ai_result.get("trust_score", 70)
-                        processed_groups[group_id]["header"]["trust_score"] = trust_score
-                        processed_groups[group_id]["overview"]["primary_driver"]["social_score"] = trust_score
-                        processed_groups[group_id]["overview"]["primary_driver"]["text"] = ai_result.get("sentiment_text", "AI analysis completed")
-                        processed_groups[group_id]["header"]["risk_badge"] = ai_result.get("risk_badge", "MED RISK")
-                        processed_groups[group_id]["overview"]["metrics"]["repayment_rate"] = ai_result.get("repayment_prediction", 85)
-                        
-                        # Recalculate node size with AI data
-                        risk_type = "healthy" if "LOW" in ai_result.get("risk_badge", "") else ("medium" if "MED" in ai_result.get("risk_badge", "") else "toxic")
-                        processed_groups[group_id]["type"] = risk_type
-                        
-                except Exception as e:
-                    print(f"   ⚠️ Future error: {str(e)[:30]}...")
-        
-        elapsed = time.time() - start_time
-        print(f"🎯 AI COMPLETED: {ai_completed}/{len(ai_queue)} groups in {elapsed:.2f}s ({elapsed/len(ai_queue):.3f}s per group)")
-    
-    # Clear AI queue
-    if hasattr(process_data, 'ai_queue'):
-        delattr(process_data, 'ai_queue')
+        print(f"✅ {group_id} Created | Trust: {trust_score}")
 
     # 4. NEIGHBORS WIRING
     gids = list(processed_groups.keys())
