@@ -35,7 +35,7 @@ GCS_BUCKET = os.getenv("GCS_BUCKET")  # if set, upload output to this GCS bucket
 GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
 MAX_NODES = 100  # Total Node yang dibuat
 AI_LIMIT = 1000  # 20 Node pertama pakai Real AI, sisanya Smart Mockup
-MAX_WORKERS = int(os.getenv("MAX_WORKERS", "8"))  # Parallel processing threads
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))  # Parallel processing threads (reduced for API quota)
 
 # --- VISUAL SIZING SYSTEM ---
 # 🎯 SISTEM UKURAN NODE BERDASARKAN URGENSI PERHATIAN:
@@ -348,7 +348,7 @@ def process_single_group(args):
         else:
             bisnis_img_url = "placeholder_bisnis.jpg"
 
-        # --- B. AI INTELLIGENCE (Hybrid) ---
+        # --- B. AI INTELLIGENCE WITH RETRY LOGIC ---
         ai_data = {}
 
         # Cek apakah pakai AI atau Mockup
@@ -357,32 +357,57 @@ def process_single_group(args):
             and GOOGLE_API_KEY != "MASUKKAN_API_KEY_ANDA_DISINI"
             and AI_AVAILABLE
         ):
-            # 🔴 REAL AI PATH with error handling
-            try:
-                prompt = GROUP_ANALYSIS_PROMPT.format(
-                    group_text=f"ID: {group_id}, DPD: {avg_dpd}, Biz: {common_biz}, Loan: {total_loan}"
-                )
-                vertex_inputs = [prompt]
+            # 🔴 REAL AI PATH with exponential backoff retry
+            prompt = GROUP_ANALYSIS_PROMPT.format(
+                group_text=f"ID: {group_id}, DPD: {avg_dpd}, Biz: {common_biz}, Loan: {total_loan}"
+            )
+            vertex_inputs = [prompt]
 
-                # ➕ Add optimized image
-                optimized_image = optimize_image_memory(home_img_path)
-                if optimized_image:
-                    vertex_inputs.append(optimized_image)
+            # ➕ Add optimized image
+            optimized_image = optimize_image_memory(home_img_path)
+            if optimized_image:
+                vertex_inputs.append(optimized_image)
 
-                # 🔥 GENERATE WITH VERTEX (NO DELAYS)
-                resp = model.generate_content(
-                    vertex_inputs,
-                    generation_config={
-                        "max_output_tokens": 2048,
-                        "temperature": 0.3,
-                        "response_mime_type": "application/json"
-                    }
-                )
-
-                ai_data = json.loads(resp.text)
-            except Exception as e:
-                print(f"      ⚠️ AI Error for {group_id}: {e}")
-                # Fallback to mockup immediately
+            # 🔄 RETRY LOGIC WITH EXPONENTIAL BACKOFF
+            max_retries = 3
+            base_delay = 2  # Start with 2 seconds
+            
+            for attempt in range(max_retries):
+                try:
+                    # 🔥 GENERATE WITH VERTEX
+                    resp = model.generate_content(
+                        vertex_inputs,
+                        generation_config={
+                            "max_output_tokens": 2048,
+                            "temperature": 0.3,
+                            "response_mime_type": "application/json"
+                        }
+                    )
+                    ai_data = json.loads(resp.text)
+                    # Success! Break out of retry loop
+                    break
+                    
+                except Exception as e:
+                    error_str = str(e).lower()
+                    is_quota_error = (
+                        "429" in error_str or 
+                        "resource exhausted" in error_str or 
+                        "quota" in error_str or
+                        "rate limit" in error_str
+                    )
+                    
+                    if is_quota_error and attempt < max_retries - 1:
+                        # Exponential backoff: 2s, 4s, 8s
+                        delay = base_delay * (2 ** attempt)
+                        print(f"      ⏳ {group_id} Rate limited (attempt {attempt + 1}/{max_retries}), retrying in {delay}s...")
+                        time.sleep(delay)
+                    elif attempt == max_retries - 1:
+                        print(f"      ⚠️ {group_id} AI failed after {max_retries} attempts: {e}")
+                        # Final attempt failed, will use fallback
+                    else:
+                        # Non-quota error, fail immediately
+                        print(f"      ⚠️ {group_id} AI Error (non-quota): {e}")
+                        break
 
         # Smart Mockup fallback
         if not ai_data:
@@ -549,7 +574,7 @@ def process_single_group(args):
 # ==========================================
 def process_data():
     global AI_AVAILABLE
-    print(f"🚀 MEMULAI PARALLEL SEEDING ({MAX_NODES} Nodes, {MAX_WORKERS} Workers)...")
+    print(f"🚀 MEMULAI PARALLEL SEEDING ({MAX_NODES} Nodes, {MAX_WORKERS} Workers with Rate Limiting)...")
 
     # 1. Load CSV
     def load_csv_safe(name):
