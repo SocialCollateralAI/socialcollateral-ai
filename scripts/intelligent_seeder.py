@@ -6,15 +6,22 @@ import random
 import time
 from datetime import datetime
 
-import google.generativeai as genai
+# import google.generativeai as genai
 from PIL import Image
 
 # ==========================================
 # 🔧 KONFIGURASI PROJECT
 # ==========================================
 # Config from environment (override at deploy time)
-GOOGLE_API_KEY = "AIzaSyCW9TOk3TyICizVfATqx6qfJI35ztL75co"
+from vertexai import init
+from vertexai.generative_models import GenerativeModel, Image as VertexImage
 
+GCP_PROJECT = "valiant-student-479606-p6"
+GCP_LOCATION = "asia-southeast2"
+# GOOGLE_API_KEY = "AIzaSyCW9TOk3TyICizVfATqx6qfJI35ztL75co"
+init(project=GCP_PROJECT, location=GCP_LOCATION)
+
+model = GenerativeModel("gemini-1.5-flash")
 # Path File
 RAW_DATA_DIR = "samples"
 IMAGE_DIR = "data/images"
@@ -38,35 +45,35 @@ AI_LIMIT = 1000  # 20 Node pertama pakai Real AI, sisanya Smart Mockup
 # - TOXIC: Makin buruk performance → Makin besar → Butuh perhatian segera!
 
 # Setup Gemini
-if not GOOGLE_API_KEY:
-    print("⚠️  PERINGATAN: API Key belum diisi. AI calls will be skipped.")
-else:
-    genai.configure(api_key=GOOGLE_API_KEY)
+# if not GOOGLE_API_KEY:
+#     print("⚠️  PERINGATAN: API Key belum diisi. AI calls will be skipped.")
+# else:
+#     genai.configure(api_key=GOOGLE_API_KEY)
 
-model_names = [
-    "gemini-pro-latest",
-    "gemini-1.5-flash",  # Try flash first as it's more widely available
-    "gemini-1.0-pro-vision-latest",
-    "gemini-1.0-pro-latest", 
-    "gemini-1.0-pro",
-    "gemini-pro-vision",
-]
-model = None
-for mn in model_names:
-    try:
-        # Try to initialize model; don't run a test generate here in containerized env
-        candidate = genai.GenerativeModel(mn)
-        model = candidate
-        print(f"✅ Google AI model initialized: {mn}")
-        break
-    except Exception as e:
-        print(f"⚠️ Model {mn} not available or unsupported: {e}")
+# model_names = [
+#     "gemini-pro-latest",
+#     "gemini-1.5-flash",  # Try flash first as it's more widely available
+#     "gemini-1.0-pro-vision-latest",
+#     "gemini-1.0-pro-latest", 
+#     "gemini-1.0-pro",
+#     "gemini-pro-vision",
+# ]
+# model = None
+# for mn in model_names:
+#     try:
+#         # Try to initialize model; don't run a test generate here in containerized env
+#         candidate = genai.GenerativeModel(mn)
+#         model = candidate
+#         print(f"✅ Google AI model initialized: {mn}")
+#         break
+#     except Exception as e:
+#         print(f"⚠️ Model {mn} not available or unsupported: {e}")
 
-if model is None:
-    print("⚠️ No Gemini model initialized. AI calls will be skipped or will fall back.")
-    AI_AVAILABLE = False
-else:
-    AI_AVAILABLE = True
+# if model is None:
+#     print("⚠️ No Gemini model initialized. AI calls will be skipped or will fall back.")
+#     AI_AVAILABLE = False
+# else:
+#     AI_AVAILABLE = True
 
 # ==========================================
 # 🧠 AI PROMPT (Hanya untuk Real AI)
@@ -92,7 +99,29 @@ Output JSON (Strict JSON, no markdown):
 # ==========================================
 # 🛠️ SMART GENERATORS (Menjamin Struktur Lengkap)
 # ==========================================
+def run_vertex_ai(prompt, image_path=None):
+    """Generate JSON dari Vertex AI (Gemini 1.5 Flash)."""
+    try:
+        parts = [prompt]
 
+        if image_path and image_path != "placeholder.jpg":
+            with open(image_path, "rb") as f:
+                img_bytes = f.read()
+            parts.append(
+                VertexImage.from_bytes(img_bytes, mime_type="image/jpeg")
+            )
+
+        resp = model.generate_content(
+            parts,
+            generation_config={"response_mime_type": "application/json"},
+            stream=False
+        )
+
+        return json.loads(resp.text)
+
+    except Exception as e:
+        print("⚠️ Vertex AI Error:", e)
+        return None
 
 def generate_group_name(index):
     """Nama Kelompok Realistis"""
@@ -375,28 +404,35 @@ def process_data():
         ai_data = {}
 
         # Cek apakah pakai AI atau Mockup
-        if (
-            group_counter < AI_LIMIT
-            and GOOGLE_API_KEY != "MASUKKAN_API_KEY_ANDA_DISINI"
-        ):
-            # 🔴 REAL AI PATH
-            try:
-                print(f"   ✨ AI Processing {group_id}...")
-                prompt = GROUP_ANALYSIS_PROMPT.format(
-                    group_text=f"ID: {group_id}, DPD: {avg_dpd}, Biz: {common_biz}, Loan: {total_loan}"
-                )
-                inputs = [prompt]
-                if img_path != "placeholder.jpg":
-                    inputs.append(Image.open(img_path))
+        # if (
+        #     group_counter < AI_LIMIT
+        #     and GOOGLE_API_KEY != "MASUKKAN_API_KEY_ANDA_DISINI"
+        # ):
+        #     # 🔴 REAL AI PATH
+        #     try:
+        #         print(f"   ✨ AI Processing {group_id}...")
+        #         prompt = GROUP_ANALYSIS_PROMPT.format(
+        #             group_text=f"ID: {group_id}, DPD: {avg_dpd}, Biz: {common_biz}, Loan: {total_loan}"
+        #         )
+        #         inputs = [prompt]
+        #         if img_path != "placeholder.jpg":
+        #             inputs.append(Image.open(img_path))
 
-                resp = model.generate_content(
-                    inputs, generation_config={"response_mime_type": "application/json"}
-                )
-                ai_data = json.loads(resp.text)
-                time.sleep(1)
-            except Exception as e:
-                print(f"      ⚠️ AI Error: {e}")
-                # Fallback ke mockup jika AI error
+        #         resp = model.generate_content(
+        #             inputs, generation_config={"response_mime_type": "application/json"}
+        #         )
+        #         ai_data = json.loads(resp.text)
+        #         time.sleep(1)
+        #     except Exception as e:
+        #         print(f"      ⚠️ AI Error: {e}")
+        #         # Fallback ke mockup jika AI error
+         if group_counter < AI_LIMIT:
+            print(f"✨ Vertex AI: {group_id}")
+            prompt = GROUP_ANALYSIS_PROMPT.format(
+                group_text=f"ID {group_id}, DPD {avg_dpd}, Biz {common_biz}, Loan {total_loan}"
+            )
+            ai_data = run_vertex_ai(prompt, image_path=img_path)
+
 
         if not ai_data:
             # 🔵 SMART MOCKUP PATH (Fallback Cerdas)
