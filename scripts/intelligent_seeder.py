@@ -6,90 +6,21 @@ import random
 import time
 from datetime import datetime
 
-# import google.generativeai as genai
+import google.generativeai as genai
 from PIL import Image
 
 # ==========================================
 # 🔧 KONFIGURASI PROJECT
 # ==========================================
 # Config from environment (override at deploy time)
-from vertexai import init
-from vertexai.generative_models import GenerativeModel, Image as VertexImage
-
-GCP_PROJECT = "valiant-student-479606-p6"
-GCP_LOCATION = "us-central1"  # Changed from asia-southeast2 for better Gemini support
-# GOOGLE_API_KEY = "AIzaSyCW9TOk3TyICizVfATqx6qfJI35ztL75co"
-init(project=GCP_PROJECT, location=GCP_LOCATION)
-
-print(f"🔧 Initializing Vertex AI: Project={GCP_PROJECT}, Location={GCP_LOCATION}")
-print(f"💡 To check available models, run:")
-print(f"   gcloud ai models list --region={GCP_LOCATION} --filter=\"displayName:gemini\"")
-print()
-
-# Model options with vision capability flags (us-central1 optimized)
-MODEL_OPTIONS = [
-    {"name": "gemini-2.5-flash-image", "vision": True, "description": "Pro model with vision"},
-]
-
-print("🌍 Note: Switched to us-central1 region for better Gemini model availability")
-
-# Try models in order until one works
-model = None
-selected_model_info = None
-
-for model_info in MODEL_OPTIONS:
-    model_name = model_info["name"]
-    try:
-        print(f"🧪 Testing model: {model_name} ({model_info['description']})")
-        test_model = GenerativeModel(model_name)
-        
-        # Simple test without JSON format requirement
-        test_response = test_model.generate_content("Hello", stream=False)
-        if test_response and test_response.text:
-            print(f"   ✓ Test response: {test_response.text[:50]}...")
-        
-        model = test_model
-        selected_model_info = model_info
-        print(f"✅ Using model: {model_name}")
-        print(f"   Vision capable: {'Yes' if model_info['vision'] else 'No'}")
-        break
-        
-    except Exception as e:
-        print(f"❌ Model {model_name} failed: {str(e)[:100]}...")
-        continue
-
-if not model:
-    print("🚨 No working model found!")
-    print("💡 Try these solutions in order:")
-    print("   1. Enable required APIs:")
-    print("      gcloud services enable aiplatform.googleapis.com")
-    print("      gcloud services enable generativelanguage.googleapis.com")
-    print("   2. Check if your project has Gemini access:")
-    print("      https://console.cloud.google.com/vertex-ai/generative")
-    print("   3. Try the Gemini API instead of Vertex AI")
-    print("   4. For now, using smart mock mode (realistic fake data)")
-    print("🤖 Continuing with smart mock mode (no AI analysis)...")
-    
-    # Create a dummy model object that will always fail gracefully
-    class MockModel:
-        def generate_content(self, *args, **kwargs):
-            raise Exception("Mock model - using fallback")
-    
-    model = MockModel()
-    selected_model_info = {"vision": False, "name": "mock"}
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "AIzaSyCW9TOk3TyICizVfATqx6qfJI35ztL75co")
 
 # Path File
-RAW_DATA_DIR = "samples"
-IMAGE_DIR = "data/images"
-OUTPUT_JSON = "data/mock_db.json"
-GCS_BUCKET = None  # if set, upload output to this GCS bucket
-AI_DELAY = 5.0  # Very conservative rate limiting
-MAX_RETRIES = 2  # Fewer retries, faster fallback
-BACKOFF_MULTIPLIER = 3  # Longer waits
-
-# Auto-configure image sending (disabled for stability)
-SEND_IMAGES = True  # Disabled to avoid model compatibility issues
-print(f"📷 Image analysis: {'Enabled' if SEND_IMAGES else 'Disabled'}")
+RAW_DATA_DIR = os.getenv("RAW_DATA_DIR", "samples")
+IMAGE_DIR = os.getenv("IMAGE_DIR", "data/images")
+OUTPUT_JSON = os.getenv("OUTPUT_JSON", "data/mock_db.json")
+GCS_BUCKET = os.getenv("GCS_BUCKET")  # if set, upload output to this GCS bucket
+AI_DELAY = float(os.getenv("AI_DELAY", "1.0"))
 
 # --- SETTINGAN DEMO ---
 GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
@@ -106,127 +37,62 @@ AI_LIMIT = 1000  # 20 Node pertama pakai Real AI, sisanya Smart Mockup
 # - HEALTHY: Makin bagus performance → Makin besar → Prioritas modal
 # - TOXIC: Makin buruk performance → Makin besar → Butuh perhatian segera!
 
-# Legacy Google AI setup (cleaned up)
+# Setup Gemini
+if not GOOGLE_API_KEY:
+    print("⚠️  PERINGATAN: API Key belum diisi. AI calls will be skipped.")
+else:
+    genai.configure(api_key=GOOGLE_API_KEY)
+
+model_names = [
+    "gemini-pro-latest",
+    "gemini-1.5-flash",  # Try flash first as it's more widely available
+    "gemini-1.0-pro-vision-latest",
+    "gemini-1.0-pro-latest", 
+    "gemini-1.0-pro",
+    "gemini-pro-vision",
+]
+model = None
+for mn in model_names:
+    try:
+        # Try to initialize model; don't run a test generate here in containerized env
+        candidate = genai.GenerativeModel(mn)
+        model = candidate
+        print(f"✅ Google AI model initialized: {mn}")
+        break
+    except Exception as e:
+        print(f"⚠️ Model {mn} not available or unsupported: {e}")
+
+if model is None:
+    print("⚠️ No Gemini model initialized. AI calls will be skipped or will fall back.")
+    AI_AVAILABLE = False
+else:
+    AI_AVAILABLE = True
 
 # ==========================================
 # 🧠 AI PROMPT (Hanya untuk Real AI)
 # ==========================================
 GROUP_ANALYSIS_PROMPT = """
-Analisis cepat: {group_text}
-Output JSON:
+Role: Senior Risk Analyst Microfinance Indonesia.
+Data Kelompok:
+{group_text}
+
+Tugas: Analisis profil risiko kelompok ini.
+
+Output JSON (Strict JSON, no markdown):
 {{
-  "risk_badge": "LOW RISK/MED RISK/HIGH RISK",
-  "trust_score": 0-100,
-  "sentiment_text": "Ringkas sentimen kelompok",
-  "asset_condition": "GOOD/AVERAGE/POOR",
-  "asset_tags": ["tag1", "tag2"],
-  "repayment_prediction": 0-100
+  "risk_badge": "LOW RISK / MED RISK / HIGH RISK",
+  "trust_score": (Integer 0-100),
+  "sentiment_text": "Satu kalimat ringkas bahasa Indonesia tentang sentimen kelompok.",
+  "asset_condition": "GOOD / AVERAGE / POOR",
+  "asset_tags": ["Tag1", "Tag2"],
+  "repayment_prediction": (Integer 0-100)
 }}
 """
 
 # ==========================================
 # 🛠️ SMART GENERATORS (Menjamin Struktur Lengkap)
 # ==========================================
-def run_vertex_ai(prompt, image_path=None):
-    """Generate JSON dari Vertex AI with retry logic."""
-    
-    for attempt in range(MAX_RETRIES):
-        try:
-            parts = [prompt]
 
-            if image_path and image_path != "placeholder.jpg":
-                with open(image_path, "rb") as f:
-                    img_bytes = f.read()
-                try:
-                    parts.append(VertexImage.from_bytes(img_bytes))
-                except TypeError:
-                    try:
-                        parts.append(VertexImage.from_bytes(img_bytes, "image/jpeg"))
-                    except Exception as e_img:
-                        print("⚠️ VertexImage.from_bytes failed:", e_img)
-
-            resp = model.generate_content(
-                parts,
-                generation_config={
-                    "response_mime_type": "application/json",
-                    "max_output_tokens": 200,
-                    "temperature": 0.1
-                },
-                stream=False
-            )
-
-            # Debug: print what AI actually returns
-            print(f"🔍 AI Response: '{resp.text}'")
-            print(f"🔍 Response length: {len(resp.text)} chars")
-            
-            if not resp.text or resp.text.strip() == "":
-                print("❌ AI returned empty response")
-                return None
-                
-            return json.loads(resp.text)
-            
-        except Exception as e:
-            msg = str(e)
-            
-            # Handle rate limiting with exponential backoff
-            if "429" in msg or "Resource exhausted" in msg:
-                if attempt < MAX_RETRIES - 1:
-                    wait_time = AI_DELAY * (BACKOFF_MULTIPLIER ** attempt)
-                    print(f"⏳ Rate limited, waiting {wait_time}s... (attempt {attempt + 1}/{MAX_RETRIES})")
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    print("❌ Max retries reached, skipping AI analysis")
-                    return None
-            
-            # Handle model capability errors  
-            if "not supported by this model" in msg or ("400" in msg and attempt == 0):
-                try:
-                    print("⚠️ Retrying with text response...")
-                    resp = model.generate_content(
-                        parts,
-                        generation_config={"max_output_tokens": 200, "temperature": 0.1},
-                        stream=False
-                    )
-                    # Try to extract JSON from text response
-                    import re
-                    json_match = re.search(r'\\{.*\\}', resp.text, re.DOTALL)
-                    if json_match:
-                        return json.loads(json_match.group())
-                    else:
-                        return None
-                except Exception:
-                    pass
-            
-            # Handle other errors
-            print("⚠️ Vertex AI Error:", msg[:100] + ("..." if len(msg) > 100 else ""))
-            
-            if "Mock model" in msg:
-                return None
-                
-            # Retry without image for certain errors
-            if image_path and image_path != "placeholder.jpg" and (
-                "Precondition check failed" in msg or "400" in msg or "vision" in msg.lower()
-            ):
-                if attempt == 0:  # Only try once without image
-                    try:
-                        print("⚠️ Retrying without image...")
-                        resp = model.generate_content(
-                            [prompt],
-                            generation_config={
-                                "response_mime_type": "application/json",
-                                "max_output_tokens": 200,
-                                "temperature": 0.1
-                            },
-                            stream=False,
-                        )
-                        return json.loads(resp.text)
-                    except Exception as e2:
-                        print("⚠️ Retry failed:", str(e2)[:50] + "...")
-            
-            return None
-    
-    return None  # Fallback if all retries failed
 
 def generate_group_name(index):
     """Nama Kelompok Realistis"""
@@ -371,7 +237,8 @@ def generate_modal_recommendation(trust_score, risk_status, business_type, node_
 # 🚀 DATA PROCESSOR
 # ==========================================
 def process_data():
-    print(f"🚀 FAST SEEDING ({MAX_NODES} Nodes)...")
+    global AI_AVAILABLE
+    print(f"🚀 MEMULAI SEEDING FULL STRUCTURE ({MAX_NODES} Nodes)...")
 
     # 1. Load CSV
     def load_csv_safe(name):
@@ -425,11 +292,10 @@ def process_data():
     all_cust_ids = list(cust_map.keys())
     processed_groups = {}
 
-    # Find images recursively inside `data/images` (supports subfolders)
     images = (
-        glob.glob(os.path.join(IMAGE_DIR, "**", "*.jpg"), recursive=True)
-        + glob.glob(os.path.join(IMAGE_DIR, "**", "*.jpeg"), recursive=True)
-        + glob.glob(os.path.join(IMAGE_DIR, "**", "*.png"), recursive=True)
+        glob.glob(f"{IMAGE_DIR}/*.jpg")
+        + glob.glob(f"{IMAGE_DIR}/*.jpeg")
+        + glob.glob(f"{IMAGE_DIR}/*.png")
     )
     if not images:
         images = ["placeholder.jpg"]
@@ -503,31 +369,34 @@ def process_data():
 
         # Image
         img_path = images[group_counter % len(images)]
-        # Create a static URL that preserves subfolder structure so files
-        # under `data/images/<subdir>/...` map to `/static/<subdir>/...`
-        try:
-            rel = os.path.relpath(img_path, IMAGE_DIR)
-        except Exception:
-            rel = os.path.basename(img_path)
-        img_url = f"data/images/{rel.replace(os.sep, '/')}"
-        # Debug: show mapping from filesystem path -> public URL
-        try:
-            print(f"   📷 Image chosen: {img_path} -> {img_url}")
-        except Exception:
-            pass
+        img_url = f"http://localhost:8000/static/{os.path.basename(img_path)}"
 
         # --- B. AI INTELLIGENCE (Hybrid) ---
         ai_data = {}
 
-        # AI Analysis (Fast Mode)
-        if group_counter < AI_LIMIT:
-            print(f"⚡ AI: {group_id}")
-            prompt = GROUP_ANALYSIS_PROMPT.format(
-                group_text=f"DPD:{avg_dpd} Biz:{common_biz} Loan:{int(total_loan)}"
-            )
-            ai_data = run_vertex_ai(prompt, image_path=img_path if SEND_IMAGES else None)
-            if ai_data:
-                time.sleep(AI_DELAY)  # Throttle for rate limits
+        # Cek apakah pakai AI atau Mockup
+        if (
+            group_counter < AI_LIMIT
+            and GOOGLE_API_KEY != "MASUKKAN_API_KEY_ANDA_DISINI"
+        ):
+            # 🔴 REAL AI PATH
+            try:
+                print(f"   ✨ AI Processing {group_id}...")
+                prompt = GROUP_ANALYSIS_PROMPT.format(
+                    group_text=f"ID: {group_id}, DPD: {avg_dpd}, Biz: {common_biz}, Loan: {total_loan}"
+                )
+                inputs = [prompt]
+                if img_path != "placeholder.jpg":
+                    inputs.append(Image.open(img_path))
+
+                resp = model.generate_content(
+                    inputs, generation_config={"response_mime_type": "application/json"}
+                )
+                ai_data = json.loads(resp.text)
+                time.sleep(1)
+            except Exception as e:
+                print(f"      ⚠️ AI Error: {e}")
+                # Fallback ke mockup jika AI error
 
         if not ai_data:
             # 🔵 SMART MOCKUP PATH (Fallback Cerdas)
