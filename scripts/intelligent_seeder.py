@@ -6,7 +6,7 @@ import random
 import time
 from datetime import datetime
 
-import google.generativeai as genai
+from google import genai
 from PIL import Image
 
 # ==========================================
