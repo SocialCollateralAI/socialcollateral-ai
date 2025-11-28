@@ -28,6 +28,9 @@ IMAGE_DIR = "data/images"
 OUTPUT_JSON = "data/mock_db.json"
 GCS_BUCKET = None  # if set, upload output to this GCS bucket
 AI_DELAY = 1.0
+# Control whether we attach images to Vertex AI requests. Set to True
+# only if your selected model supports vision (e.g. a vision-capable Gemini).
+SEND_IMAGES = False
 
 # --- SETTINGAN DEMO ---
 GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
@@ -465,7 +468,10 @@ def process_data():
             prompt = GROUP_ANALYSIS_PROMPT.format(
                 group_text=f"ID {group_id}, DPD {avg_dpd}, Biz {common_biz}, Loan {total_loan}"
             )
-            ai_data = run_vertex_ai(prompt, image_path=img_path)
+            # Only attach image bytes when SEND_IMAGES is True. Many Gemini
+            # text/flash models are not vision-capable and will return a
+            # Precondition check failed (400) if an image part is included.
+            ai_data = run_vertex_ai(prompt, image_path=img_path if SEND_IMAGES else None)
 
 
         if not ai_data:
