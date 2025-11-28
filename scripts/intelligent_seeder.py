@@ -83,7 +83,9 @@ RAW_DATA_DIR = "samples"
 IMAGE_DIR = "data/images"
 OUTPUT_JSON = "data/mock_db.json"
 GCS_BUCKET = None  # if set, upload output to this GCS bucket
-AI_DELAY = 0.1  # Fast mode
+AI_DELAY = 3.0  # Conservative rate limiting  
+MAX_RETRIES = 3
+BACKOFF_MULTIPLIER = 2
 
 # Auto-configure image sending based on model capability
 SEND_IMAGES = selected_model_info["vision"] if selected_model_info else False
@@ -126,35 +128,76 @@ Output JSON:
 # 🛠️ SMART GENERATORS (Menjamin Struktur Lengkap)
 # ==========================================
 def run_vertex_ai(prompt, image_path=None):
-    """Generate JSON dari Vertex AI (Gemini 1.5 Flash)."""
-    try:
-        parts = [prompt]
+    """Generate JSON dari Vertex AI with retry logic."""
+    
+    for attempt in range(MAX_RETRIES):
+        try:
+            parts = [prompt]
 
-        if image_path and image_path != "placeholder.jpg":
-            with open(image_path, "rb") as f:
-                img_bytes = f.read()
-            # Some versions of the Vertex SDK don't accept the `mime_type`
-            # keyword. Try the simple call first, then attempt positional
-            # fallback if a TypeError is raised.
-            try:
-                parts.append(VertexImage.from_bytes(img_bytes))
-            except TypeError:
+            if image_path and image_path != "placeholder.jpg":
+                with open(image_path, "rb") as f:
+                    img_bytes = f.read()
                 try:
-                    parts.append(VertexImage.from_bytes(img_bytes, "image/jpeg"))
-                except Exception as e_img:
-                    print("⚠️ VertexImage.from_bytes failed:", e_img)
+                    parts.append(VertexImage.from_bytes(img_bytes))
+                except TypeError:
+                    try:
+                        parts.append(VertexImage.from_bytes(img_bytes, "image/jpeg"))
+                    except Exception as e_img:
+                        print("⚠️ VertexImage.from_bytes failed:", e_img)
 
-        resp = model.generate_content(
-            parts,
-            generation_config={
-                "response_mime_type": "application/json",
-                "max_output_tokens": 200,
-                "temperature": 0.1
-            },
-            stream=False
-        )
+            resp = model.generate_content(
+                parts,
+                generation_config={
+                    "response_mime_type": "application/json",
+                    "max_output_tokens": 200,
+                    "temperature": 0.1
+                },
+                stream=False
+            )
 
-        return json.loads(resp.text)
+            return json.loads(resp.text)
+            
+        except Exception as e:
+            msg = str(e)
+            
+            # Handle rate limiting with exponential backoff
+            if "429" in msg or "Resource exhausted" in msg:
+                if attempt < MAX_RETRIES - 1:
+                    wait_time = AI_DELAY * (BACKOFF_MULTIPLIER ** attempt)
+                    print(f"⏳ Rate limited, waiting {wait_time}s... (attempt {attempt + 1}/{MAX_RETRIES})")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    print("❌ Max retries reached, skipping AI analysis")
+                    return None
+            
+            # Handle other errors
+            print("⚠️ Vertex AI Error:", msg[:100] + ("..." if len(msg) > 100 else ""))
+            
+            if "Mock model" in msg:
+                return None
+                
+            # Retry without image for certain errors
+            if image_path and image_path != "placeholder.jpg" and (
+                "Precondition check failed" in msg or "400" in msg or "vision" in msg.lower()
+            ):
+                if attempt == 0:  # Only try once without image
+                    try:
+                        print("⚠️ Retrying without image...")
+                        resp = model.generate_content(
+                            [prompt],
+                            generation_config={
+                                "response_mime_type": "application/json",
+                                "max_output_tokens": 200,
+                                "temperature": 0.1
+                            },
+                            stream=False,
+                        )
+                        return json.loads(resp.text)
+                    except Exception as e2:
+                        print("⚠️ Retry failed:", str(e2)[:50] + "...")
+            
+            return None
 
     except Exception as e:
         msg = str(e)
