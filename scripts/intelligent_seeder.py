@@ -409,41 +409,62 @@ def process_single_group(args):
                         print(f"      ⚠️ {group_id} AI Error (non-quota): {e}")
                         break
 
-        # Smart Mockup fallback
+        # Smart Mockup fallback - WITH VARIED TRUST SCORES
         if not ai_data:
-            base_trust = (
-                95
-                if risk_status == "HEALTHY"
-                else (70 if risk_status == "MEDIUM" else 40)
-            )
+            # Generate varied trust scores for better size differentiation
+            if risk_status == "HEALTHY":
+                # HEALTHY: Trust score 70-95 (varied)
+                base_trust = random.randint(70, 95)
+            elif risk_status == "MEDIUM":
+                # MEDIUM: Trust score 40-75 (varied)
+                base_trust = random.randint(40, 75)
+            else:  # TOXIC
+                # TOXIC: Trust score 10-55 (varied, lower = bigger size)
+                base_trust = random.randint(10, 55)
+                
             ai_data = {
                 "risk_badge": f"{risk_status} RISK",
                 "trust_score": base_trust,
                 "sentiment_text": f"Kelompok didominasi usaha {common_biz}, performa pembayaran {risk_status.lower()}.",
                 "asset_condition": "AVERAGE",
                 "asset_tags": ["Usaha Mikro", "Bangunan Permanen"],
-                "repayment_prediction": 98 if risk_status == "HEALTHY" else 60,
+                "repayment_prediction": base_trust,  # Use trust_score for consistency
             }
 
         # --- C. CONSTRUCT JSON (FULL SCHEMA) ---
         trust_score = ai_data.get("trust_score", 70)
 
-        # 🎯 VISUAL SIZE LOGIC
+        # 🎯 VISUAL SIZE LOGIC - IMPROVED FOR CLEAR DIFFERENTIATION
         def calculate_node_size(trust_score, risk_status):
-            base_size = 20
+            """
+            HEALTHY: Trust Score 70-100 → Size 25-50px (Makin tinggi trust, makin besar)
+            MEDIUM: Trust Score 40-80 → Size 18-28px (Moderat)  
+            TOXIC: Trust Score 10-60 → Size 20-45px (Makin rendah trust, makin besar untuk urgent attention!)
+            """
             
             if risk_status == "HEALTHY":
-                size = base_size + int((trust_score - 70) * 0.7) + 5
+                # HEALTHY: 25-50px based on trust score
+                # Trust 70 → 25px, Trust 100 → 50px
+                size = 25 + int((trust_score - 70) * 0.83)  # (50-25)/(100-70) = 0.83
                 return max(25, min(50, size))
+                
             elif risk_status == "MEDIUM":
-                size = base_size + int((trust_score - 50) * 0.25)
-                return max(15, min(25, size))
+                # MEDIUM: 18-28px based on trust score
+                # Trust 40 → 18px, Trust 80 → 28px
+                size = 18 + int((trust_score - 40) * 0.25)  # (28-18)/(80-40) = 0.25
+                return max(18, min(28, size))
+                
             else:  # TOXIC
-                inverted_score = 100 - trust_score
-                size = 15 + int(inverted_score * 0.4)
-                return max(15, min(40, size))
+                # TOXIC: 20-45px (INVERTED - makin rendah trust, makin besar!)
+                # Trust 60 → 20px, Trust 10 → 45px
+                inverted_urgency = (60 - trust_score) if trust_score <= 60 else 0
+                size = 20 + int(inverted_urgency * 0.5)  # (45-20)/50 = 0.5
+                return max(20, min(45, size))
 
         node_size = calculate_node_size(trust_score, risk_status)
+        
+        # 🚨 DEBUG: Print size calculation for verification
+        print(f"      📊 {group_id}: {risk_status} | Trust: {trust_score} → Size: {node_size}px")
 
         # Generate random location
         location = generate_random_location()
