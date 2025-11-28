@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +24,13 @@ def root():
     return {"message": "Backend is Running!"}
 
 
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "message": "SocialCollateral AI Backend is running"}
+
+
 # Serve static images folder so URLs like /static/images/<subpath>
 # map to files under `data/images/<subpath>` inside the container.
-app.mount("/static/images", StaticFiles(directory="data/images"), name="static_images")
+# Only mount if the directory exists to prevent startup errors
+if os.path.exists("data/images"):
+    app.mount("/static/images", StaticFiles(directory="data/images"), name="static_images")
