@@ -28,7 +28,7 @@ print()
 
 # Model options with vision capability flags (us-central1 optimized)
 MODEL_OPTIONS = [
-    {"name": "gemini-2.5-flash-images", "vision": True, "description": "Pro model with vision"},
+    {"name": "gemini-2.5-flash-image", "vision": True, "description": "Pro model with vision"},
 ]
 
 print("🌍 Note: Switched to us-central1 region for better Gemini model availability")
