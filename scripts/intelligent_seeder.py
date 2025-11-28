@@ -426,7 +426,7 @@ def process_data():
         #     except Exception as e:
         #         print(f"      ⚠️ AI Error: {e}")
         #         # Fallback ke mockup jika AI error
-         if group_counter < AI_LIMIT:
+        if group_counter < AI_LIMIT:
             print(f"✨ Vertex AI: {group_id}")
             prompt = GROUP_ANALYSIS_PROMPT.format(
                 group_text=f"ID {group_id}, DPD {avg_dpd}, Biz {common_biz}, Loan {total_loan}"
