@@ -22,14 +22,20 @@ GCP_LOCATION = "asia-southeast2"
 init(project=GCP_PROJECT, location=GCP_LOCATION)
 
 print(f"🔧 Initializing Vertex AI: Project={GCP_PROJECT}, Location={GCP_LOCATION}")
+print(f"💡 To check available models, run:")
+print(f"   gcloud ai models list --region={GCP_LOCATION} --filter=\"displayName:gemini\"")
+print()
 
 # Model options with vision capability flags
 MODEL_OPTIONS = [
+    {"name": "gemini-1.5-pro-001", "vision": True, "description": "Pro model v001 with vision"},
+    {"name": "gemini-1.5-flash-001", "vision": False, "description": "Flash v001 text-only"},
     {"name": "gemini-1.5-pro", "vision": True, "description": "Pro model with vision"},
     {"name": "gemini-1.5-flash", "vision": False, "description": "Fast model, text-only"},
+    {"name": "gemini-pro", "vision": False, "description": "Basic pro model"},
     {"name": "gemini-pro-vision", "vision": True, "description": "Legacy vision model"},
-    {"name": "gemini-1.0-pro-vision", "vision": True, "description": "Legacy v1.0 vision"},
-    {"name": "gemini-1.0-pro", "vision": False, "description": "Legacy text model"}
+    {"name": "text-bison", "vision": False, "description": "PaLM text model"},
+    {"name": "text-bison@001", "vision": False, "description": "PaLM text v001"}
 ]
 
 # Try models in order until one works
