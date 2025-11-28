@@ -8,21 +8,19 @@ from datetime import datetime
 
 import google.generativeai as genai
 from PIL import Image
-from google.cloud import storage
-from google.cloud import secretmanager
 
 # ==========================================
 # 🔧 KONFIGURASI PROJECT
 # ==========================================
 # Config from environment (override at deploy time)
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "AIzaSyCW9TOk3TyICizVfATqx6qfJI35ztL75co")
+GOOGLE_API_KEY = "AIzaSyCW9TOk3TyICizVfATqx6qfJI35ztL75co"
 
 # Path File
-RAW_DATA_DIR = os.getenv("RAW_DATA_DIR", "samples")
-IMAGE_DIR = os.getenv("IMAGE_DIR", "data/images")
-OUTPUT_JSON = os.getenv("OUTPUT_JSON", "data/mock_db.json")
-GCS_BUCKET = os.getenv("GCS_BUCKET")  # if set, upload output to this GCS bucket
-AI_DELAY = float(os.getenv("AI_DELAY", "1.0"))
+RAW_DATA_DIR = "samples"
+IMAGE_DIR = "data/images"
+OUTPUT_JSON = "data/mock_db.json"
+GCS_BUCKET = None  # if set, upload output to this GCS bucket
+AI_DELAY = 1.0
 
 # --- SETTINGAN DEMO ---
 GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
