@@ -107,9 +107,16 @@ def run_vertex_ai(prompt, image_path=None):
         if image_path and image_path != "placeholder.jpg":
             with open(image_path, "rb") as f:
                 img_bytes = f.read()
-            parts.append(
-                VertexImage.from_bytes(img_bytes, mime_type="image/jpeg")
-            )
+            # Some versions of the Vertex SDK don't accept the `mime_type`
+            # keyword. Try the simple call first, then attempt positional
+            # fallback if a TypeError is raised.
+            try:
+                parts.append(VertexImage.from_bytes(img_bytes))
+            except TypeError:
+                try:
+                    parts.append(VertexImage.from_bytes(img_bytes, "image/jpeg"))
+                except Exception as e_img:
+                    print("⚠️ VertexImage.from_bytes failed:", e_img)
 
         resp = model.generate_content(
             parts,
