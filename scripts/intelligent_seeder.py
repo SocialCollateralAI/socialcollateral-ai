@@ -88,7 +88,7 @@ MAX_RETRIES = 2  # Fewer retries, faster fallback
 BACKOFF_MULTIPLIER = 3  # Longer waits
 
 # Auto-configure image sending (disabled for stability)
-SEND_IMAGES = False  # Disabled to avoid model compatibility issues
+SEND_IMAGES = True  # Disabled to avoid model compatibility issues
 print(f"📷 Image analysis: {'Enabled' if SEND_IMAGES else 'Disabled'}")
 
 # --- SETTINGAN DEMO ---
