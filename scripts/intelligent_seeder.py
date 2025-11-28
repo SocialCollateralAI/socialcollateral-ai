@@ -155,6 +155,14 @@ def run_vertex_ai(prompt, image_path=None):
                 stream=False
             )
 
+            # Debug: print what AI actually returns
+            print(f"🔍 AI Response: '{resp.text}'")
+            print(f"🔍 Response length: {len(resp.text)} chars")
+            
+            if not resp.text or resp.text.strip() == "":
+                print("❌ AI returned empty response")
+                return None
+                
             return json.loads(resp.text)
             
         except Exception as e:
