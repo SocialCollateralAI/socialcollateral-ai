@@ -46,10 +46,10 @@ AI_LIMIT = 1000  # 20 Node pertama pakai Real AI, sisanya Smart Mockup
 # - TOXIC: Makin buruk performance → Makin besar → Butuh perhatian segera!
 
 # Setup Gemini
-if not GOOGLE_API_KEY:
-    print("⚠️  PERINGATAN: API Key belum diisi. AI calls will be skipped.")
-else:
-    genai.configure(api_key=GOOGLE_API_KEY)
+# if not GOOGLE_API_KEY:
+#     print("⚠️  PERINGATAN: API Key belum diisi. AI calls will be skipped.")
+# else:
+#     genai.configure(api_key=GOOGLE_API_KEY)
 
 model_names = [
     "gemini-2.5-flash",
