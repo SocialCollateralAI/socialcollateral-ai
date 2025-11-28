@@ -6,13 +6,21 @@ import random
 import time
 from datetime import datetime
 
-import google.generativeai as genai
+# import google.generativeai as genai
+from vertexai.preview.generative_models import GenerativeModel, Part
+import vertexai
+
 from PIL import Image
 
 # ==========================================
 # 🔧 KONFIGURASI PROJECT
 # ==========================================
 # Config from environment (override at deploy time)
+GCP_PROJECT_ID = "valiant-student-479606-p6"
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "valiant-student-479606-p6")
+GCP_LOCATION = os.getenv("GCP_LOCATION", "us-central1")
+
+vertexai.init(project=GCP_PROJECT_ID, location=GCP_LOCATION)
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "AIzaSyCW9TOk3TyICizVfATqx6qfJI35ztL75co")
 
 # Path File
@@ -44,18 +52,14 @@ else:
     genai.configure(api_key=GOOGLE_API_KEY)
 
 model_names = [
-    "gemini-pro-latest",
-    "gemini-1.5-flash",  # Try flash first as it's more widely available
-    "gemini-1.0-pro-vision-latest",
-    "gemini-1.0-pro-latest", 
-    "gemini-1.0-pro",
-    "gemini-pro-vision",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-image",
 ]
 model = None
 for mn in model_names:
     try:
         # Try to initialize model; don't run a test generate here in containerized env
-        candidate = genai.GenerativeModel(mn)
+        candidate = GenerativeModel(mn)
         model = candidate
         print(f"✅ Google AI model initialized: {mn}")
         break
@@ -369,7 +373,7 @@ def process_data():
 
         # Image
         img_path = images[group_counter % len(images)]
-        img_url = f"http://localhost:8000/static/{os.path.basename(img_path)}"
+        img_url = f"data/images/{os.path.basename(img_path)}"
 
         # --- B. AI INTELLIGENCE (Hybrid) ---
         ai_data = {}
@@ -389,10 +393,33 @@ def process_data():
                 if img_path != "placeholder.jpg":
                     inputs.append(Image.open(img_path))
 
+                # resp = model.generate_content(
+                #     inputs, generation_config={"response_mime_type": "application/json"}
+                # )
+                # ai_data = json.loads(resp.text)
+                vertex_inputs = []
+
+                # ➕ Add Text Prompt
+                vertex_inputs.append(prompt)
+
+                # ➕ Add Image (if exists)
+                if img_path != "placeholder.jpg":
+                    vertex_inputs.append(
+                        Part.from_image(Image.open(img_path))
+                    )
+
+                # 🔥 GENERATE WITH VERTEX
                 resp = model.generate_content(
-                    inputs, generation_config={"response_mime_type": "application/json"}
+                    vertex_inputs,
+                    generation_config={
+                        "max_output_tokens": 2048,
+                        "temperature": 0.3,
+                        "response_mime_type": "application/json"
+                    }
                 )
+
                 ai_data = json.loads(resp.text)
+                time.sleep(AI_DELAY)
                 time.sleep(1)
             except Exception as e:
                 print(f"      ⚠️ AI Error: {e}")
