@@ -120,7 +120,27 @@ def run_vertex_ai(prompt, image_path=None):
         return json.loads(resp.text)
 
     except Exception as e:
-        print("⚠️ Vertex AI Error:", e)
+        # If the model is text-only (no vision support) Vertex may return
+        # a 400 Precondition check failed when an image part is included.
+        msg = str(e)
+        print("⚠️ Vertex AI Error:", msg)
+
+        # Retry without image if we attempted to send one and Vertex refused it.
+        if image_path and image_path != "placeholder.jpg" and (
+            "Precondition check failed" in msg or "400" in msg or "vision" in msg.lower()
+        ):
+            try:
+                print("⚠️ Retrying Vertex AI request without image...")
+                resp = model.generate_content(
+                    [prompt],
+                    generation_config={"response_mime_type": "application/json"},
+                    stream=False,
+                )
+                return json.loads(resp.text)
+            except Exception as e2:
+                print("⚠️ Vertex AI retry failed:", e2)
+                return None
+
         return None
 
 def generate_group_name(index):
@@ -321,10 +341,11 @@ def process_data():
     all_cust_ids = list(cust_map.keys())
     processed_groups = {}
 
+    # Find images recursively inside `data/images` (supports subfolders)
     images = (
-        glob.glob(f"{IMAGE_DIR}/*.jpg")
-        + glob.glob(f"{IMAGE_DIR}/*.jpeg")
-        + glob.glob(f"{IMAGE_DIR}/*.png")
+        glob.glob(os.path.join(IMAGE_DIR, "**", "*.jpg"), recursive=True)
+        + glob.glob(os.path.join(IMAGE_DIR, "**", "*.jpeg"), recursive=True)
+        + glob.glob(os.path.join(IMAGE_DIR, "**", "*.png"), recursive=True)
     )
     if not images:
         images = ["placeholder.jpg"]
@@ -398,7 +419,13 @@ def process_data():
 
         # Image
         img_path = images[group_counter % len(images)]
-        img_url = f"http://localhost:8000/static/{os.path.basename(img_path)}"
+        # Create a static URL that preserves subfolder structure so files
+        # under `data/images/<subdir>/...` map to `/static/<subdir>/...`
+        try:
+            rel = os.path.relpath(img_path, IMAGE_DIR)
+        except Exception:
+            rel = os.path.basename(img_path)
+        img_url = f"http://localhost:8000/static/{rel.replace(os.sep, '/')}"
 
         # --- B. AI INTELLIGENCE (Hybrid) ---
         ai_data = {}
