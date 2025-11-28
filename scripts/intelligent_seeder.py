@@ -5,7 +5,9 @@ import os
 import random
 import time
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import concurrent.futures
+from threading import Lock
+import asyncio
 from functools import lru_cache
 
 # import google.generativeai as genai
@@ -30,16 +32,15 @@ RAW_DATA_DIR = os.getenv("RAW_DATA_DIR", "samples")
 IMAGE_DIR = os.getenv("IMAGE_DIR", "data/images")
 OUTPUT_JSON = os.getenv("OUTPUT_JSON", "data/mock_db.json")
 GCS_BUCKET = os.getenv("GCS_BUCKET")  # if set, upload output to this GCS bucket
-AI_DELAY = float(os.getenv("AI_DELAY", "0.05"))  # Reduced from 0.1 to 0.05
-
-# 🔥 PERFORMANCE CACHE
-_ai_cache = {}
-_batch_cache = {}
+AI_DELAY = float(os.getenv("AI_DELAY", "0.01"))  # Reduced from 0.1 to 0.01
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "5"))  # Concurrent processing
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", "3"))  # Process in batches
 
 # --- SETTINGAN DEMO ---
 GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
-MAX_NODES = 1000  # Total Node yang dibuat
-AI_LIMIT = 1000  # 20 Node pertama pakai Real AI, sisanya Smart Mockup
+MAX_NODES = 10  # Total Node yang dibuat
+AI_LIMIT = 1000  # Node yang menggunakan Real AI
+ENABLE_AI_PARALLEL = True  # Toggle parallel processing
 
 # --- VISUAL SIZING SYSTEM ---
 # 🎯 SISTEM UKURAN NODE BERDASARKAN URGENSI PERHATIAN:
@@ -77,6 +78,18 @@ if model is None:
     AI_AVAILABLE = False
 else:
     AI_AVAILABLE = True
+
+# Image cache untuk menghindari loading berulang
+@lru_cache(maxsize=100)
+def load_image_cached(img_path):
+    """Load and cache images to avoid repeated file I/O"""
+    try:
+        return Image.open(img_path)
+    except:
+        return None
+
+# Thread lock untuk model access
+model_lock = Lock()
 
 # ==========================================
 # 🧠 AI PROMPT (Hanya untuk Real AI)
@@ -243,156 +256,48 @@ def generate_modal_recommendation(trust_score, risk_status, business_type, node_
         return f"🔴 TIDAK LAYAK: Kelompok {business_type} tidak direkomendasikan untuk modal. Fokus recovery dulu."
 
 
-# ==========================================
-# 🚀 OPTIMIZED AI BATCH PROCESSOR
-# ==========================================
-
-# 🔥 AI BATCH PROCESSING - Process multiple groups at once
-@lru_cache(maxsize=100)
-def generate_cache_key(batch_data):
-    """Generate cache key for batch data"""
-    return hash(str(sorted(batch_data)))
-
-def process_ai_batch(batch_groups, model, with_images=False, sample_home_img=None, sample_bisnis_img=None):
-    """🚀 OPTIMIZED: Process multiple groups with caching and faster processing"""
-    if not model or not AI_AVAILABLE:
-        return {}
-    
-    # Check cache first
-    cache_key = generate_cache_key(tuple(batch_groups))
-    if cache_key in _batch_cache:
-        print("   📋 Using cached batch result")
-        return _batch_cache[cache_key]
+def process_ai_single(group_data_tuple):
+    """🚀 OPTIMIZED: Process single group with AI - thread-safe"""
+    group_id, avg_dpd, common_biz, total_loan, img_path = group_data_tuple
     
     try:
-        # 🔥 STABLE PROMPT with clear JSON boundaries
-        combined_prompt = f"Analyze {len(batch_groups)} microfinance groups:\n"
-        
-        for i, group_data in enumerate(batch_groups):
-            combined_prompt += f"{i+1}. {group_data}\n"
-        
-        combined_prompt += f"""\nReturn EXACTLY this JSON format for all {len(batch_groups)} groups:
-[
-{",".join([f'{{"group_index":{i+1},"risk_badge":"LOW RISK","trust_score":85,"sentiment_text":"Good group","asset_condition":"GOOD","asset_tags":["Mikro"],"repayment_prediction":90}}' for i in range(len(batch_groups))])}
-]
-
-Only JSON, no explanation."""
-        
-        # 🏠🏢 Add single sample image to save tokens (only for small batches)
-        vertex_inputs = [combined_prompt]
-        if with_images and len(batch_groups) <= 3 and sample_home_img:
-            home_part = get_cached_image(sample_home_img)
-            if home_part:
-                vertex_inputs.append(home_part)
-                print("   🖼️ Added sample image for context")
-        
-        resp = model.generate_content(
-            vertex_inputs,
-            generation_config={
-                "max_output_tokens": 1500,  # Reduced to avoid MAX_TOKENS
-                "temperature": 0.2,  # Slightly higher for better response
-                "response_mime_type": "application/json",
-                "candidate_count": 1,
-                "top_p": 0.8,
-                "top_k": 40
-            }
+        prompt = GROUP_ANALYSIS_PROMPT.format(
+            group_text=f"ID: {group_id}, DPD: {avg_dpd}, Biz: {common_biz}, Loan: {total_loan}"
         )
         
-        # 🔧 ROBUST ERROR HANDLING with JSON sanitization
-        if not resp.text or resp.text.strip() == "":
-            print("   ⚠️ Empty AI response, using fallback")
-            return {}
+        vertex_inputs = [prompt]
         
-        # 🛠️ JSON SANITIZATION - Clean up malformed responses
-        raw_text = resp.text.strip()
+        # Load cached image efficiently
+        if img_path != "placeholder.jpg" and os.path.exists(img_path):
+            cached_img = load_image_cached(img_path)
+            if cached_img:
+                vertex_inputs.append(Part.from_image(cached_img))
         
-        # Try to fix common JSON issues
-        if raw_text.startswith('```json'):
-            raw_text = raw_text.replace('```json', '').replace('```', '')
-        
-        # Remove any trailing incomplete parts
-        if raw_text.count('{') != raw_text.count('}'):
-            # Find last complete object
-            bracket_count = 0
-            last_valid_pos = -1
-            for i, char in enumerate(raw_text):
-                if char == '{':
-                    bracket_count += 1
-                elif char == '}':
-                    bracket_count -= 1
-                    if bracket_count == 0:
-                        last_valid_pos = i
+        # Thread-safe model access with optimized config
+        with model_lock:
+            resp = model.generate_content(
+                vertex_inputs,
+                generation_config={
+                    "max_output_tokens": 512,  # Further reduced for speed
+                    "temperature": 0.1,  # Lower temperature for faster, more consistent results  
+                    "top_p": 0.8,
+                    "top_k": 20,
+                    "response_mime_type": "application/json"
+                }
+            )
             
-            if last_valid_pos > 0:
-                raw_text = raw_text[:last_valid_pos + 1]
-                if not raw_text.endswith(']'):
-                    raw_text += ']'
-        
-        try:
-            batch_results = json.loads(raw_text)
-            if not isinstance(batch_results, list):
-                print("   ⚠️ Invalid AI response format, using fallback")
-                return {}
-            result = {result['group_index']: result for result in batch_results if 'group_index' in result}
-            print(f"   ✅ AI processed {len(result)} groups successfully")
-        except json.JSONDecodeError as e:
-            print(f"   ⚠️ JSON decode error: {str(e)[:50]}..., generating structured fallback")
-            # Generate structured fallback response
-            fallback_results = []
-            for i in range(len(batch_groups)):
-                fallback_results.append({
-                    "group_index": i + 1,
-                    "risk_badge": "MED RISK",
-                    "trust_score": 75,
-                    "sentiment_text": "Mixed performance group",
-                    "asset_condition": "AVERAGE", 
-                    "asset_tags": ["Usaha Mikro"],
-                    "repayment_prediction": 80
-                })
-            result = {result['group_index']: result for result in fallback_results}
-        
-        # Cache the result
-        _batch_cache[cache_key] = result
-        return result
-        
-    except Exception as e:
-        print(f"      ⚠️ Batch AI Error: {str(e)[:100]}...")
-        # Return empty dict to trigger individual mockup fallback
-        return {}
-
-# 🔥 OPTIMIZED IMAGE CACHE - Preload and LRU cache
-@lru_cache(maxsize=50)
-def get_cached_image(img_path):
-    """🚀 Fast cached image loading with LRU eviction"""
-    try:
-        if img_path and img_path != "placeholder.jpg" and "placeholder" not in img_path and os.path.exists(img_path):
-            # 🔧 FIXED: Use proper method for Vertex AI Part creation
-            with Image.open(img_path) as img:
-                # Convert to RGB if necessary and resize for faster processing
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                img.thumbnail((512, 512), Image.Resampling.LANCZOS)
+            result = json.loads(resp.text)
+            print(f"   ✅ AI Completed {group_id}")
+            return group_id, result
                 
-                # Save to temporary bytes buffer for Part.from_data
-                import io
-                img_bytes = io.BytesIO()
-                img.save(img_bytes, format='JPEG', quality=85)
-                img_bytes.seek(0)
-                
-                return Part.from_data(img_bytes.read(), mime_type="image/jpeg")
-        else:
-            return None
     except Exception as e:
-        print(f"⚠️ Image load error {img_path}: {e}")
-        return None
+        print(f"   ⚠️ AI Error {group_id}: {str(e)[:50]}...")
+        return group_id, None
 
-def preload_images(image_paths):
-    """🚀 Preload images in parallel for better performance"""
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = {executor.submit(get_cached_image, path): path for path in image_paths[:20]}  # Preload first 20
-        for future in as_completed(futures):
-            pass  # Just preload, don't store result
 
+# ==========================================
+# 🚀 DATA PROCESSOR
+# ==========================================
 def process_data():
     global AI_AVAILABLE
     print(f"🚀 MEMULAI SEEDING FULL STRUCTURE ({MAX_NODES} Nodes)...")
@@ -449,46 +354,15 @@ def process_data():
     all_cust_ids = list(cust_map.keys())
     processed_groups = {}
 
-    # 🔥 SEPARATE IMAGE LOADING by category
-    home_images = (
-        glob.glob(f"{IMAGE_DIR}/home/*.jpg")
-        + glob.glob(f"{IMAGE_DIR}/home/*.jpeg")
-        + glob.glob(f"{IMAGE_DIR}/home/*.png")
+    images = (
+        glob.glob(f"{IMAGE_DIR}/*.jpg")
+        + glob.glob(f"{IMAGE_DIR}/*.jpeg")
+        + glob.glob(f"{IMAGE_DIR}/*.png")
     )
-    bisnis_images = (
-        glob.glob(f"{IMAGE_DIR}/bisnis/*.jpg")
-        + glob.glob(f"{IMAGE_DIR}/bisnis/*.jpeg")
-        + glob.glob(f"{IMAGE_DIR}/bisnis/*.png")
-    )
-    
-    # 🔧 SMART FALLBACK: Only use actual images, no placeholders for faster processing
-    if not home_images:
-        print("⚠️ No home images found, using fallback URLs")
-        home_images = []
-    if not bisnis_images:
-        print("⚠️ No bisnis images found, using fallback URLs") 
-        bisnis_images = []
-    
-    # 🚀 MINIMAL PRELOADING - Only essential images for AI
-    if home_images or bisnis_images:
-        essential_images = []
-        if home_images:
-            essential_images.append(home_images[0])  # Only first image for AI context
-        if bisnis_images:
-            essential_images.append(bisnis_images[0])  # Only first image for AI context
-            
-        print(f"🖼️ Found {len(home_images)} home + {len(bisnis_images)} bisnis images (preloading {len(essential_images)} for AI)...")
-        preload_images(essential_images)
-    else:
-        print("🖼️ No images found, using placeholders")
+    if not images:
+        images = ["placeholder.jpg"]
 
     group_counter = 0
-    start_time = time.time()
-    
-    # 🚀 TOKEN-OPTIMIZED BATCH PROCESSING - Smaller batches to avoid MAX_TOKENS
-    BATCH_SIZE = 4  # Reduced from 8 to 4 to avoid token limits
-    pending_groups = []  # Store groups for batch processing
-    batch_ai_results = {}  # Store AI results
 
     for i in range(0, len(all_cust_ids), GROUP_SIZE):
         if group_counter >= MAX_NODES:
@@ -555,103 +429,24 @@ def process_data():
             lat += (random.random() - 0.5) * 0.05
             lng += (random.random() - 0.5) * 0.05
 
-        # 🏠🏢 SMART IMAGE SELECTION based on business type
-        home_img_path = home_images[group_counter % len(home_images)] if home_images else "placeholder_home.jpg"
-        bisnis_img_path = bisnis_images[group_counter % len(bisnis_images)] if bisnis_images else "placeholder_bisnis.jpg"
+        # Image
+        img_path = images[group_counter % len(images)]
+        img_url = f"data/images/{os.path.basename(img_path)}"
 
-        # --- B. OPTIMIZED AI INTELLIGENCE (Batch Processing) ---
+        # --- B. PREPARE AI DATA COLLECTION ---
+        # Store for later batch processing
+        ai_processing_queue = getattr(process_data, 'ai_queue', [])
         
-        # Store group data for batch processing
-        group_data = {
-            'id': group_id,
-            'counter': group_counter,
-            'text': f"ID: {group_id}, DPD: {avg_dpd}, Biz: {common_biz}, Loan: {total_loan}",
-            'home_img_path': home_img_path,
-            'bisnis_img_path': bisnis_img_path,
-            'risk_status': risk_status,
-            'lat': lat,
-            'lng': lng,
-            'common_biz': common_biz,
-            'batch_ids': batch_ids,
-            'avg_dpd': avg_dpd,
-            'total_loan': total_loan,
-            'node_color': node_color
-        }
+        # Add to AI queue if should use AI
+        if (group_counter < AI_LIMIT and GOOGLE_API_KEY != "MASUKKAN_API_KEY_ANDA_DISINI" and AI_AVAILABLE):
+            ai_processing_queue.append((group_id, avg_dpd, common_biz, total_loan, img_path))
         
-        pending_groups.append(group_data)
+        # Store queue back 
+        process_data.ai_queue = ai_processing_queue
         
-        # Process batch when we have enough groups or at the end
-        if len(pending_groups) >= BATCH_SIZE or (i + GROUP_SIZE >= len(all_cust_ids)):
-            print(f"🚀 Batch Processing {len(pending_groups)} groups...")
-            
-            # 🚀 OPTIMIZED: Parallel batch processing with minimal delay
-            if (
-                group_counter < AI_LIMIT
-                and GOOGLE_API_KEY != "MASUKKAN_API_KEY_ANDA_DISINI"
-                and model and AI_AVAILABLE
-            ):
-                batch_texts = [g['text'] for g in pending_groups]
-                try:
-                    # 🏠 Get sample image for context (simplified to avoid token limits)
-                    sample_home = home_images[0] if home_images else None
-                    use_images = len(pending_groups) <= 3 and sample_home is not None
-                    
-                    # Process AI batch without blocking other operations
-                    batch_results = process_ai_batch(
-                        batch_texts, 
-                        model, 
-                        with_images=use_images,
-                        sample_home_img=sample_home,
-                        sample_bisnis_img=None  # Skip bisnis image to save tokens
-                    )
-                    for idx, result in batch_results.items():
-                        if idx <= len(pending_groups):
-                            batch_ai_results[pending_groups[idx-1]['id']] = result
-                    
-                    # 🔥 MINIMAL DELAY - Only if needed for rate limiting
-                    if len(batch_texts) > 3:  # Only delay for large batches
-                        time.sleep(AI_DELAY)  # Reduced delay
-                except Exception as e:
-                    print(f"⚠️ Batch AI Error: {e}")
-            
-            # 🚀 CONCURRENT: Process groups in parallel for speed
-            def process_group_wrapper(group_data):
-                return process_single_group(group_data, batch_ai_results, home_images, bisnis_images)
-            
-            # Use parallel processing for group construction
-            with ThreadPoolExecutor(max_workers=3) as executor:
-                futures = {executor.submit(process_group_wrapper, g): g for g in pending_groups}
-                for future in as_completed(futures):
-                    group_id, group_result = future.result()
-                    processed_groups[group_id] = group_result
-            
-            pending_groups.clear()  # Clear batch
-        
-        group_counter += 1
-
-    processing_time = time.time() - start_time
-    print(f"🚀 All {group_counter} groups processed in {processing_time:.2f}s!")
-    print(f"📊 Average: {processing_time/group_counter:.2f}s per group")
-    print(f"💾 Cache hits: {len(_batch_cache)} batch(es) cached")
-    
-    # Finalize with neighbor wiring and save
-    finalize_processing(processed_groups)
-
-# 🔥 OPTIMIZED SINGLE GROUP PROCESSOR
-def process_single_group(group_data, batch_ai_results, home_images, bisnis_images):
-    """🚀 OPTIMIZED: Process single group and return result (no side effects)"""
-    group_id = group_data['id']
-    
-    # Get AI data from batch results or generate mockup
-    ai_data = batch_ai_results.get(group_id, {})
-    
-    if not ai_data:
-        # 🔵 SMART MOCKUP PATH (Fallback Cerdas)
-        risk_status = group_data['risk_status']
-        common_biz = group_data['common_biz']
+        # Default AI data for initial structure (will be updated by AI if available)
         base_trust = (
-            95
-            if risk_status == "HEALTHY"
+            95 if risk_status == "HEALTHY"
             else (70 if risk_status == "MEDIUM" else 40)
         )
         ai_data = {
@@ -663,153 +458,195 @@ def process_single_group(group_data, batch_ai_results, home_images, bisnis_image
             "repayment_prediction": 98 if risk_status == "HEALTHY" else 60,
         }
 
-    # --- C. CONSTRUCT JSON (FULL SCHEMA) ---
-    trust_score = ai_data.get("trust_score", 70)
-    risk_status = group_data['risk_status']
-    common_biz = group_data['common_biz']
-    lat = group_data['lat']
-    lng = group_data['lng']
-    batch_ids = group_data['batch_ids']
-    avg_dpd = group_data['avg_dpd']
-    total_loan = group_data['total_loan']
-    node_color = group_data['node_color']
-    home_img_path = group_data['home_img_path']
-    bisnis_img_path = group_data['bisnis_img_path']
-    group_counter = group_data['counter']
+        # --- C. CONSTRUCT JSON (FULL SCHEMA) ---
+        # Ini bagian penting: Kita kembalikan semua field yang diminta FE
 
-    # 🎯 VISUAL SIZE LOGIC - Size menunjukkan urgensi perhatian
-    def calculate_node_size(trust_score, risk_status):
-        base_size = 20
+        trust_score = ai_data.get("trust_score", 70)
+
+        # 🎯 VISUAL SIZE LOGIC - Size menunjukkan urgensi perhatian
+        # HEALTHY: Semakin tinggi trust score = Semakin besar (prioritas modal tinggi)
+        # TOXIC: Semakin rendah trust score = Semakin besar (urgensi penanganan tinggi)
+        def calculate_node_size(trust_score, risk_status):
+            base_size = 20
+            
+            if risk_status == "HEALTHY":
+                # Healthy: 25-50 (Semakin tinggi trust score = Semakin besar = Prioritas modal tinggi)
+                size = base_size + int((trust_score - 70) * 0.7) + 5
+                return max(25, min(50, size))
+            elif risk_status == "MEDIUM":
+                # Medium: 15-25 (Sedang-sedang saja)
+                size = base_size + int((trust_score - 50) * 0.25)
+                return max(15, min(25, size))
+            else:  # TOXIC
+                # Toxic: 15-40 (Semakin RENDAH trust score = Semakin BESAR = Urgensi penanganan tinggi!)
+                # Inversi: trust_score rendah = size besar
+                inverted_score = 100 - trust_score  # Flip the score
+                size = 15 + int(inverted_score * 0.4)  # Semakin rendah trust, semakin besar node
+                return max(15, min(40, size))
+
+        node_size = calculate_node_size(trust_score, risk_status)
+
+        # Generate random location (moved outside dict to avoid syntax error)
+        location = generate_random_location()
+
+        processed_groups[group_id] = {
+            "id": group_id,
+            "type": node_color,
+            "size": node_size,  # 🔥 NEW: Visual indicator untuk kelayakan modal
+            "x": random.randint(0, 1000),
+            "y": random.randint(0, 1000),
+            "lat": lat,
+            "lng": lng,
+            "header": {
+                "name": generate_group_name(group_counter + 1),
+                "location_city": location["city"],
+                "location_village": location["village"],
+                "member_count": len(batch_ids),
+                "risk_badge": ai_data.get("risk_badge"),
+                "trust_score": trust_score,
+                "loan_eligibility": "Eligible" if trust_score > 70 else "Review",
+                "total_loan_amount": int(total_loan),
+                "visual_priority": "HIGH" if (risk_status == "HEALTHY" and node_size >= 35) or (risk_status == "TOXIC" and node_size >= 30) else "MEDIUM" if node_size >= 20 else "LOW",  # 🔥 NEW: Visual cue untuk frontend
+            },
+            "overview": {
+                "primary_driver": {
+                    "text": ai_data.get("sentiment_text"),
+                    "payment_score": ai_data.get("repayment_prediction"),
+                    "social_score": trust_score,
+                },
+                "metrics": {
+                    "cycle": random.randint(1, 10),
+                    "repayment_rate": ai_data.get("repayment_prediction"),
+                    "avg_delay": f"H+{int(avg_dpd)}",
+                },
+                "neighbors": [],  # Diisi nanti
+            },
+            # 🔥 FIELD LENGKAP UNTUK GRAFIK FE
+            "trends": {
+                "repayment_history": generate_trend_data(trust_score, is_asset=False),
+                "asset_growth": generate_trend_data(
+                    trust_score, is_asset=True
+                ),  # Wajib ada
+                "stats": {
+                    "streak": random.randint(1, 12),
+                    "last_default": "Never" if avg_dpd == 0 else "Active",
+                    "trend_val": 2.5,
+                    "trend_dir": "up" if trust_score > 70 else "down",
+                    "avg_rate": 98.0,
+                    "best_rate": 100.0,
+                },
+                "seasonality_heatmap": [
+                    1,
+                    1,
+                    1,
+                    2,
+                    2,
+                    3,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                ],  # Mock data heatmap
+            },
+            # 🔥 FIELD LENGKAP UNTUK INSIGHTS
+            "insights": {
+                "social_graph": {
+                    "risk_members": generate_risk_members(
+                        len(batch_ids), node_color
+                    )  # Wajib ada untuk popup
+                },
+                "cv": {
+                    "home": {
+                        "condition": ai_data.get("asset_condition"),
+                        "material": "Verified",
+                        "roof": "Tile",
+                        "access": "Paved",
+                        "occupancy": "Occupied",
+                        "assets": ai_data.get("asset_tags"),
+                        "img_url": img_url,
+                    },
+                    "biz": {
+                        "stability": "Permanent",
+                        "type": common_biz,
+                        "traffic": "Medium",
+                        "status": "Active",
+                        "digital": "QRIS",
+                        "inventory": ["Full"],
+                        "img_url": img_url,
+                    },
+                },
+                "prediction": {  # Wajib ada
+                    "default_risk_prob": 100 - trust_score,
+                    "horizon_days": 30,
+                    "what_if": {
+                        "current_score": trust_score,
+                        "projected_score": min(100, trust_score + 5),
+                        "improvement_pct": 5,
+                        "scenario": "Intervention",
+                    },
+                },
+                "recommendation_text": f"Saran AI: {generate_modal_recommendation(trust_score, risk_status, common_biz, node_size)}",
+            },
+            "decision": {
+                "last_audit": f"Agent {random.choice(['Budi', 'Sari'])}",
+                "is_locked": True if risk_status == "TOXIC" else False,
+                "audit_date": datetime.now().strftime("%Y-%m-%d"),
+            },
+        }
+
+        group_counter += 1
         
-        if risk_status == "HEALTHY":
-            size = base_size + int((trust_score - 70) * 0.7) + 5
-            return max(25, min(50, size))
-        elif risk_status == "MEDIUM":
-            size = base_size + int((trust_score - 50) * 0.25)
-            return max(15, min(25, size))
-        else:  # TOXIC
-            inverted_score = 100 - trust_score
-            size = 15 + int(inverted_score * 0.4)
-            return max(15, min(40, size))
-
-    node_size = calculate_node_size(trust_score, risk_status)
+    # 3.5. PARALLEL AI PROCESSING (🚀 ULTRA OPTIMIZED)
+    ai_queue = getattr(process_data, 'ai_queue', [])
     
-    # 🏠🏢 SEPARATE IMAGE URLs for home and business
-    if "placeholder" in home_img_path:
-        home_img_url = "data/images/placeholder_home.jpg"
-    else:
-        home_img_url = f"data/images/home/{os.path.basename(home_img_path)}"
+    if ai_queue and AI_AVAILABLE and ENABLE_AI_PARALLEL:
+        print(f"🚀 PARALLEL AI Processing {len(ai_queue)} groups with {MAX_WORKERS} workers...")
+        start_time = time.time()
         
-    if "placeholder" in bisnis_img_path:
-        bisnis_img_url = "data/images/placeholder_bisnis.jpg"  
-    else:
-        bisnis_img_url = f"data/images/bisnis/{os.path.basename(bisnis_img_path)}"
+        # Process with ThreadPoolExecutor for maximum speed
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            # Submit all AI tasks at once
+            future_to_group = {
+                executor.submit(process_ai_single, group_data): group_data[0] 
+                for group_data in ai_queue
+            }
+            
+            # Process results as they complete
+            ai_completed = 0
+            for future in concurrent.futures.as_completed(future_to_group, timeout=30):
+                try:
+                    group_id, ai_result = future.result()
+                    ai_completed += 1
+                    
+                    if ai_result and group_id in processed_groups:
+                        # Update with real AI data
+                        trust_score = ai_result.get("trust_score", 70)
+                        processed_groups[group_id]["header"]["trust_score"] = trust_score
+                        processed_groups[group_id]["overview"]["primary_driver"]["social_score"] = trust_score
+                        processed_groups[group_id]["overview"]["primary_driver"]["text"] = ai_result.get("sentiment_text", "AI analysis completed")
+                        processed_groups[group_id]["header"]["risk_badge"] = ai_result.get("risk_badge", "MED RISK")
+                        processed_groups[group_id]["overview"]["metrics"]["repayment_rate"] = ai_result.get("repayment_prediction", 85)
+                        
+                        # Recalculate node size with AI data
+                        risk_type = "healthy" if "LOW" in ai_result.get("risk_badge", "") else ("medium" if "MED" in ai_result.get("risk_badge", "") else "toxic")
+                        processed_groups[group_id]["type"] = risk_type
+                        
+                except Exception as e:
+                    print(f"   ⚠️ Future error: {str(e)[:30]}...")
+        
+        elapsed = time.time() - start_time
+        print(f"🎯 AI COMPLETED: {ai_completed}/{len(ai_queue)} groups in {elapsed:.2f}s ({elapsed/len(ai_queue):.3f}s per group)")
     
-    # Generate location data
-    location = generate_random_location()
+    # Clear AI queue
+    if hasattr(process_data, 'ai_queue'):
+        delattr(process_data, 'ai_queue')
 
-    # Construct final group data
-    group_result = {
-        "id": group_id,
-        "type": node_color,
-        "size": node_size,  # 🔥 NEW: Visual indicator untuk kelayakan modal
-        "x": random.randint(0, 1000),
-        "y": random.randint(0, 1000),
-        "lat": lat,
-        "lng": lng,
-        "header": {
-            "name": generate_group_name(group_counter + 1),
-            "location_city": location["city"],
-            "location_village": location["village"],
-            "member_count": len(batch_ids),
-            "risk_badge": ai_data.get("risk_badge"),
-            "trust_score": trust_score,
-            "loan_eligibility": "Eligible" if trust_score > 70 else "Review",
-            "total_loan_amount": int(total_loan),
-            "visual_priority": "HIGH" if (risk_status == "HEALTHY" and node_size >= 35) or (risk_status == "TOXIC" and node_size >= 30) else "MEDIUM" if node_size >= 20 else "LOW",
-        },
-        "overview": {
-            "primary_driver": {
-                "text": ai_data.get("sentiment_text"),
-                "payment_score": ai_data.get("repayment_prediction"),
-                "social_score": trust_score,
-            },
-            "metrics": {
-                "cycle": random.randint(1, 10),
-                "repayment_rate": ai_data.get("repayment_prediction"),
-                "avg_delay": f"H+{int(avg_dpd)}",
-            },
-            "neighbors": [],  # Diisi nanti
-        },
-        "trends": {
-            "repayment_history": generate_trend_data(trust_score, is_asset=False),
-            "asset_growth": generate_trend_data(trust_score, is_asset=True),
-            "stats": {
-                "streak": random.randint(1, 12),
-                "last_default": "Never" if avg_dpd == 0 else "Active",
-                "trend_val": 2.5,
-                "trend_dir": "up" if trust_score > 70 else "down",
-                "avg_rate": 98.0,
-                "best_rate": 100.0,
-            },
-            "seasonality_heatmap": [1, 1, 1, 2, 2, 3, 1, 1, 1, 1, 1, 1],
-        },
-        "insights": {
-            "social_graph": {
-                "risk_members": generate_risk_members(len(batch_ids), node_color)
-            },
-            "cv": {
-                "home": {
-                    "condition": ai_data.get("asset_condition"),
-                    "material": "Verified",
-                    "roof": "Tile",
-                    "access": "Paved",
-                    "occupancy": "Occupied",
-                    "assets": ai_data.get("asset_tags"),
-                    "img_url": home_img_url,  # 🏠 HOME-specific image
-                },
-                "biz": {
-                    "stability": "Permanent",
-                    "type": common_biz,
-                    "traffic": "Medium",
-                    "status": "Active",
-                    "digital": "QRIS",
-                    "inventory": ["Full"],
-                    "img_url": bisnis_img_url,  # 🏢 BUSINESS-specific image
-                },
-            },
-            "prediction": {
-                "default_risk_prob": 100 - trust_score,
-                "horizon_days": 30,
-                "what_if": {
-                    "current_score": trust_score,
-                    "projected_score": min(100, trust_score + 5),
-                    "improvement_pct": 5,
-                    "scenario": "Intervention",
-                },
-            },
-            "recommendation_text": f"Saran AI: {generate_modal_recommendation(trust_score, risk_status, common_biz, node_size)}",
-        },
-        "decision": {
-            "last_audit": f"Agent {random.choice(['Budi', 'Sari'])}",
-            "is_locked": True if risk_status == "TOXIC" else False,
-            "audit_date": datetime.now().strftime("%Y-%m-%d"),
-        },
-    }
-    
-    print(f"✅ {group_id} Created | Trust: {trust_score}")
-    return group_id, group_result
-
-def finalize_processing(processed_groups):
-    """🔥 OPTIMIZED: Finalize processing with neighbor wiring and save"""
-    
     # 4. NEIGHBORS WIRING
     gids = list(processed_groups.keys())
     for gid in processed_groups:
-        # 🔧 FIXED: Handle case when there are fewer than 3 groups
-        other_gids = [x for x in gids if x != gid]
-        neighbor_count = min(3, len(other_gids))  # Take min of 3 or available groups
-        neighbors = random.sample(other_gids, k=neighbor_count) if other_gids else []
+        neighbors = random.sample([x for x in gids if x != gid], k=3)
         processed_groups[gid]["overview"]["neighbors"] = []
         for nid in neighbors:
             n_data = processed_groups[nid]
@@ -847,7 +684,6 @@ def finalize_processing(processed_groups):
     # Upload to GCS if requested
     if GCS_BUCKET:
         try:
-            from google.cloud import storage
             client = storage.Client()
             bucket = client.bucket(GCS_BUCKET)
             blob_name = os.path.basename(OUTPUT_JSON)
