@@ -217,32 +217,8 @@ def run_vertex_ai(prompt, image_path=None):
                         print("⚠️ Retry failed:", str(e2)[:50] + "...")
             
             return None
-
-    except Exception as e:
-        msg = str(e)
-        print("⚠️ Vertex AI Error:", msg[:100] + ("..." if len(msg) > 100 else ""))
-
-        # If this is a mock model or API not enabled, skip retry
-        if "Mock model" in msg:
-            return None
-            
-        # Retry without image if we attempted to send one and Vertex refused it
-        if image_path and image_path != "placeholder.jpg" and (
-            "Precondition check failed" in msg or "400" in msg or "vision" in msg.lower()
-        ):
-            try:
-                print("⚠️ Retrying Vertex AI request without image...")
-                resp = model.generate_content(
-                    [prompt],
-                    generation_config={"response_mime_type": "application/json"},
-                    stream=False,
-                )
-                return json.loads(resp.text)
-            except Exception as e2:
-                print("⚠️ Vertex AI retry failed:", str(e2)[:50] + "...")
-                return None
-
-        return None
+    
+    return None  # Fallback if all retries failed
 
 def generate_group_name(index):
     """Nama Kelompok Realistis"""
