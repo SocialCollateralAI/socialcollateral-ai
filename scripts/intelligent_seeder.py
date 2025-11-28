@@ -265,13 +265,18 @@ def process_ai_batch(batch_groups, model, with_images=False, sample_home_img=Non
         return _batch_cache[cache_key]
     
     try:
-        # 🔥 ULTRA-COMPACT PROMPT for token efficiency
-        combined_prompt = f"Risk analysis {len(batch_groups)} groups:\n"
+        # 🔥 STABLE PROMPT with clear JSON boundaries
+        combined_prompt = f"Analyze {len(batch_groups)} microfinance groups:\n"
         
         for i, group_data in enumerate(batch_groups):
-            combined_prompt += f"{i+1}: {group_data}\n"
+            combined_prompt += f"{i+1}. {group_data}\n"
         
-        combined_prompt += """\nJSON:[{"group_index":1,"risk_badge":"LOW RISK","trust_score":85,"sentiment_text":"Good","asset_condition":"GOOD","asset_tags":["Mikro"],"repayment_prediction":90}]"""
+        combined_prompt += f"""\nReturn EXACTLY this JSON format for all {len(batch_groups)} groups:
+[
+{",".join([f'{{"group_index":{i+1},"risk_badge":"LOW RISK","trust_score":85,"sentiment_text":"Good group","asset_condition":"GOOD","asset_tags":["Mikro"],"repayment_prediction":90}}' for i in range(len(batch_groups))])}
+]
+
+Only JSON, no explanation."""
         
         # 🏠🏢 Add single sample image to save tokens (only for small batches)
         vertex_inputs = [combined_prompt]
@@ -293,20 +298,58 @@ def process_ai_batch(batch_groups, model, with_images=False, sample_home_img=Non
             }
         )
         
-        # 🔧 ROBUST ERROR HANDLING for AI response
+        # 🔧 ROBUST ERROR HANDLING with JSON sanitization
         if not resp.text or resp.text.strip() == "":
             print("   ⚠️ Empty AI response, using fallback")
             return {}
+        
+        # 🛠️ JSON SANITIZATION - Clean up malformed responses
+        raw_text = resp.text.strip()
+        
+        # Try to fix common JSON issues
+        if raw_text.startswith('```json'):
+            raw_text = raw_text.replace('```json', '').replace('```', '')
+        
+        # Remove any trailing incomplete parts
+        if raw_text.count('{') != raw_text.count('}'):
+            # Find last complete object
+            bracket_count = 0
+            last_valid_pos = -1
+            for i, char in enumerate(raw_text):
+                if char == '{':
+                    bracket_count += 1
+                elif char == '}':
+                    bracket_count -= 1
+                    if bracket_count == 0:
+                        last_valid_pos = i
             
+            if last_valid_pos > 0:
+                raw_text = raw_text[:last_valid_pos + 1]
+                if not raw_text.endswith(']'):
+                    raw_text += ']'
+        
         try:
-            batch_results = json.loads(resp.text)
+            batch_results = json.loads(raw_text)
             if not isinstance(batch_results, list):
                 print("   ⚠️ Invalid AI response format, using fallback")
                 return {}
             result = {result['group_index']: result for result in batch_results if 'group_index' in result}
+            print(f"   ✅ AI processed {len(result)} groups successfully")
         except json.JSONDecodeError as e:
-            print(f"   ⚠️ JSON decode error: {e}, using fallback")
-            return {}
+            print(f"   ⚠️ JSON decode error: {str(e)[:50]}..., generating structured fallback")
+            # Generate structured fallback response
+            fallback_results = []
+            for i in range(len(batch_groups)):
+                fallback_results.append({
+                    "group_index": i + 1,
+                    "risk_badge": "MED RISK",
+                    "trust_score": 75,
+                    "sentiment_text": "Mixed performance group",
+                    "asset_condition": "AVERAGE", 
+                    "asset_tags": ["Usaha Mikro"],
+                    "repayment_prediction": 80
+                })
+            result = {result['group_index']: result for result in fallback_results}
         
         # Cache the result
         _batch_cache[cache_key] = result
@@ -314,7 +357,7 @@ def process_ai_batch(batch_groups, model, with_images=False, sample_home_img=Non
         
     except Exception as e:
         print(f"      ⚠️ Batch AI Error: {str(e)[:100]}...")
-        # Return empty dict to trigger fallback mockup
+        # Return empty dict to trigger individual mockup fallback
         return {}
 
 # 🔥 OPTIMIZED IMAGE CACHE - Preload and LRU cache
