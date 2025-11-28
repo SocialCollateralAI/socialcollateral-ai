@@ -42,12 +42,10 @@ for model_info in MODEL_OPTIONS:
         print(f"🧪 Testing model: {model_name} ({model_info['description']})")
         test_model = GenerativeModel(model_name)
         
-        # Quick test generation
-        test_response = test_model.generate_content(
-            ["Test message"], 
-            generation_config={"response_mime_type": "application/json", "max_output_tokens": 50},
-            stream=False
-        )
+        # Simple test without JSON format requirement
+        test_response = test_model.generate_content("Hello", stream=False)
+        if test_response and test_response.text:
+            print(f"   ✓ Test response: {test_response.text[:50]}...")
         
         model = test_model
         selected_model_info = model_info
@@ -60,8 +58,20 @@ for model_info in MODEL_OPTIONS:
         continue
 
 if not model:
-    print("🚨 No working model found! Check your GCP project and region.")
-    exit(1)
+    print("🚨 No working model found!")
+    print("💡 Possible solutions:")
+    print("   1. Enable Vertex AI API: gcloud services enable aiplatform.googleapis.com")
+    print("   2. Check region availability for Gemini models")
+    print("   3. Verify project permissions")
+    print("🤖 Continuing with smart mock mode (no AI analysis)...")
+    
+    # Create a dummy model object that will always fail gracefully
+    class MockModel:
+        def generate_content(self, *args, **kwargs):
+            raise Exception("Mock model - using fallback")
+    
+    model = MockModel()
+    selected_model_info = {"vision": False, "name": "mock"}
 
 # Path File
 RAW_DATA_DIR = "samples"
@@ -172,12 +182,14 @@ def run_vertex_ai(prompt, image_path=None):
         return json.loads(resp.text)
 
     except Exception as e:
-        # If the model is text-only (no vision support) Vertex may return
-        # a 400 Precondition check failed when an image part is included.
         msg = str(e)
-        print("⚠️ Vertex AI Error:", msg)
+        print("⚠️ Vertex AI Error:", msg[:100] + ("..." if len(msg) > 100 else ""))
 
-        # Retry without image if we attempted to send one and Vertex refused it.
+        # If this is a mock model or API not enabled, skip retry
+        if "Mock model" in msg:
+            return None
+            
+        # Retry without image if we attempted to send one and Vertex refused it
         if image_path and image_path != "placeholder.jpg" and (
             "Precondition check failed" in msg or "400" in msg or "vision" in msg.lower()
         ):
@@ -190,7 +202,7 @@ def run_vertex_ai(prompt, image_path=None):
                 )
                 return json.loads(resp.text)
             except Exception as e2:
-                print("⚠️ Vertex AI retry failed:", e2)
+                print("⚠️ Vertex AI retry failed:", str(e2)[:50] + "...")
                 return None
 
         return None
