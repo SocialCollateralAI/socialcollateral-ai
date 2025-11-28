@@ -17,7 +17,7 @@ from vertexai import init
 from vertexai.generative_models import GenerativeModel, Image as VertexImage
 
 GCP_PROJECT = "valiant-student-479606-p6"
-GCP_LOCATION = "asia-southeast2"
+GCP_LOCATION = "us-central1"  # Changed from asia-southeast2 for better Gemini support
 # GOOGLE_API_KEY = "AIzaSyCW9TOk3TyICizVfATqx6qfJI35ztL75co"
 init(project=GCP_PROJECT, location=GCP_LOCATION)
 
@@ -26,17 +26,15 @@ print(f"💡 To check available models, run:")
 print(f"   gcloud ai models list --region={GCP_LOCATION} --filter=\"displayName:gemini\"")
 print()
 
-# Model options with vision capability flags
+# Model options with vision capability flags (us-central1 optimized)
 MODEL_OPTIONS = [
-    {"name": "gemini-1.5-pro-001", "vision": True, "description": "Pro model v001 with vision"},
-    {"name": "gemini-1.5-flash-001", "vision": False, "description": "Flash v001 text-only"},
+    {"name": "gemini-1.5-flash", "vision": False, "description": "Fast model, text-only (most reliable)"},
     {"name": "gemini-1.5-pro", "vision": True, "description": "Pro model with vision"},
-    {"name": "gemini-1.5-flash", "vision": False, "description": "Fast model, text-only"},
     {"name": "gemini-pro", "vision": False, "description": "Basic pro model"},
-    {"name": "gemini-pro-vision", "vision": True, "description": "Legacy vision model"},
-    {"name": "text-bison", "vision": False, "description": "PaLM text model"},
-    {"name": "text-bison@001", "vision": False, "description": "PaLM text v001"}
+    {"name": "gemini-1.0-pro", "vision": False, "description": "Legacy v1.0 text model"}
 ]
+
+print("🌍 Note: Switched to us-central1 region for better Gemini model availability")
 
 # Try models in order until one works
 model = None
