@@ -28,7 +28,7 @@ RAW_DATA_DIR = os.getenv("RAW_DATA_DIR", "samples")
 IMAGE_DIR = os.getenv("IMAGE_DIR", "data/images")
 OUTPUT_JSON = os.getenv("OUTPUT_JSON", "data/mock_db.json")
 GCS_BUCKET = os.getenv("GCS_BUCKET")  # if set, upload output to this GCS bucket
-AI_DELAY = float(os.getenv("AI_DELAY", "1.0"))
+AI_DELAY = float(os.getenv("AI_DELAY", "0.1"))
 
 # --- SETTINGAN DEMO ---
 GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
