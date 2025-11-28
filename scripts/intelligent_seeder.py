@@ -23,17 +23,56 @@ init(project=GCP_PROJECT, location=GCP_LOCATION)
 
 print(f"🔧 Initializing Vertex AI: Project={GCP_PROJECT}, Location={GCP_LOCATION}")
 
-model = GenerativeModel("gemini-1.5-flash")
-print("✅ Using model: gemini-1.5-flash (text-only for now)")
+# Model options with vision capability flags
+MODEL_OPTIONS = [
+    {"name": "gemini-1.5-pro", "vision": True, "description": "Pro model with vision"},
+    {"name": "gemini-1.5-flash", "vision": False, "description": "Fast model, text-only"},
+    {"name": "gemini-pro-vision", "vision": True, "description": "Legacy vision model"},
+    {"name": "gemini-1.0-pro-vision", "vision": True, "description": "Legacy v1.0 vision"},
+    {"name": "gemini-1.0-pro", "vision": False, "description": "Legacy text model"}
+]
+
+# Try models in order until one works
+model = None
+selected_model_info = None
+
+for model_info in MODEL_OPTIONS:
+    model_name = model_info["name"]
+    try:
+        print(f"🧪 Testing model: {model_name} ({model_info['description']})")
+        test_model = GenerativeModel(model_name)
+        
+        # Quick test generation
+        test_response = test_model.generate_content(
+            ["Test message"], 
+            generation_config={"response_mime_type": "application/json", "max_output_tokens": 50},
+            stream=False
+        )
+        
+        model = test_model
+        selected_model_info = model_info
+        print(f"✅ Using model: {model_name}")
+        print(f"   Vision capable: {'Yes' if model_info['vision'] else 'No'}")
+        break
+        
+    except Exception as e:
+        print(f"❌ Model {model_name} failed: {str(e)[:100]}...")
+        continue
+
+if not model:
+    print("🚨 No working model found! Check your GCP project and region.")
+    exit(1)
+
 # Path File
 RAW_DATA_DIR = "samples"
 IMAGE_DIR = "data/images"
 OUTPUT_JSON = "data/mock_db.json"
 GCS_BUCKET = None  # if set, upload output to this GCS bucket
 AI_DELAY = 1.0
-# Control whether we attach images to Vertex AI requests. Set to True
-# only if your selected model supports vision (e.g. a vision-capable Gemini).
-SEND_IMAGES = False  # Start with text-only to test if basic AI analysis works
+
+# Auto-configure image sending based on model capability
+SEND_IMAGES = selected_model_info["vision"] if selected_model_info else False
+print(f"📷 Image analysis: {'Enabled' if SEND_IMAGES else 'Disabled'}")
 
 # --- SETTINGAN DEMO ---
 GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
