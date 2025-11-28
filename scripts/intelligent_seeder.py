@@ -38,7 +38,7 @@ _batch_cache = {}
 
 # --- SETTINGAN DEMO ---
 GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
-MAX_NODES = 10  # Total Node yang dibuat
+MAX_NODES = 1000  # Total Node yang dibuat
 AI_LIMIT = 1000  # 20 Node pertama pakai Real AI, sisanya Smart Mockup
 
 # --- VISUAL SIZING SYSTEM ---
