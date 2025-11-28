@@ -310,12 +310,21 @@ def process_ai_batch(batch_groups, model, with_images=False, sample_home_img=Non
 def get_cached_image(img_path):
     """🚀 Fast cached image loading with LRU eviction"""
     try:
-        if img_path != "placeholder.jpg" and os.path.exists(img_path):
-            # Use lazy loading and smaller image size for faster processing
-            img = Image.open(img_path)
-            # Resize for faster AI processing
-            img.thumbnail((512, 512), Image.Resampling.LANCZOS)
-            return Part.from_image(img)
+        if img_path and img_path != "placeholder.jpg" and "placeholder" not in img_path and os.path.exists(img_path):
+            # 🔧 FIXED: Use proper method for Vertex AI Part creation
+            with Image.open(img_path) as img:
+                # Convert to RGB if necessary and resize for faster processing
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                img.thumbnail((512, 512), Image.Resampling.LANCZOS)
+                
+                # Save to temporary bytes buffer for Part.from_data
+                import io
+                img_bytes = io.BytesIO()
+                img.save(img_bytes, format='JPEG', quality=85)
+                img_bytes.seek(0)
+                
+                return Part.from_data(img_bytes.read(), mime_type="image/jpeg")
         else:
             return None
     except Exception as e:
@@ -397,18 +406,26 @@ def process_data():
         + glob.glob(f"{IMAGE_DIR}/bisnis/*.png")
     )
     
-    # Fallback jika folder kosong
+    # 🔧 SMART FALLBACK: Only use actual images, no placeholders for faster processing
     if not home_images:
-        home_images = ["placeholder_home.jpg"]
+        print("⚠️ No home images found, using fallback URLs")
+        home_images = []
     if not bisnis_images:
-        bisnis_images = ["placeholder_bisnis.jpg"]
+        print("⚠️ No bisnis images found, using fallback URLs") 
+        bisnis_images = []
     
-    # Combine all images for preloading
-    all_images = home_images + bisnis_images
-    
-    # 🚀 PRELOAD IMAGES for faster processing
-    print(f"🖼️ Preloading {len(home_images)} home + {len(bisnis_images)} bisnis images...")
-    preload_images(all_images)
+    # 🚀 OPTIMIZED PRELOADING - Only valid images
+    if home_images or bisnis_images:
+        valid_images = []
+        if home_images:
+            valid_images.extend(home_images[:10])  # Limit to first 10 for speed
+        if bisnis_images:
+            valid_images.extend(bisnis_images[:10])  # Limit to first 10 for speed
+            
+        print(f"🖼️ Preloading {len(home_images)} home + {len(bisnis_images)} bisnis images (processing {len(valid_images)} samples)...")
+        preload_images(valid_images)
+    else:
+        print("🖼️ No images to preload, using placeholders")
 
     group_counter = 0
     start_time = time.time()
@@ -484,8 +501,8 @@ def process_data():
             lng += (random.random() - 0.5) * 0.05
 
         # 🏠🏢 SMART IMAGE SELECTION based on business type
-        home_img_path = home_images[group_counter % len(home_images)]
-        bisnis_img_path = bisnis_images[group_counter % len(bisnis_images)]
+        home_img_path = home_images[group_counter % len(home_images)] if home_images else "placeholder_home.jpg"
+        bisnis_img_path = bisnis_images[group_counter % len(bisnis_images)] if bisnis_images else "placeholder_bisnis.jpg"
 
         # --- B. OPTIMIZED AI INTELLIGENCE (Batch Processing) ---
         
@@ -520,15 +537,16 @@ def process_data():
             ):
                 batch_texts = [g['text'] for g in pending_groups]
                 try:
-                    # 🏠🏢 Get sample images for better AI context
+                    # 🏠🏢 Get sample images for better AI context (only if available)
                     sample_home = home_images[0] if home_images else None
                     sample_bisnis = bisnis_images[0] if bisnis_images else None
+                    use_images = sample_home is not None and sample_bisnis is not None
                     
                     # Process AI batch without blocking other operations
                     batch_results = process_ai_batch(
                         batch_texts, 
                         model, 
-                        with_images=True,
+                        with_images=use_images,
                         sample_home_img=sample_home,
                         sample_bisnis_img=sample_bisnis
                     )
@@ -623,8 +641,15 @@ def process_single_group(group_data, batch_ai_results, home_images, bisnis_image
     node_size = calculate_node_size(trust_score, risk_status)
     
     # 🏠🏢 SEPARATE IMAGE URLs for home and business
-    home_img_url = f"data/images/home/{os.path.basename(home_img_path)}"
-    bisnis_img_url = f"data/images/bisnis/{os.path.basename(bisnis_img_path)}"
+    if "placeholder" in home_img_path:
+        home_img_url = "data/images/placeholder_home.jpg"
+    else:
+        home_img_url = f"data/images/home/{os.path.basename(home_img_path)}"
+        
+    if "placeholder" in bisnis_img_path:
+        bisnis_img_url = "data/images/placeholder_bisnis.jpg"  
+    else:
+        bisnis_img_url = f"data/images/bisnis/{os.path.basename(bisnis_img_path)}"
     
     # Generate location data
     location = generate_random_location()
@@ -727,7 +752,10 @@ def finalize_processing(processed_groups):
     # 4. NEIGHBORS WIRING
     gids = list(processed_groups.keys())
     for gid in processed_groups:
-        neighbors = random.sample([x for x in gids if x != gid], k=3)
+        # 🔧 FIXED: Handle case when there are fewer than 3 groups
+        other_gids = [x for x in gids if x != gid]
+        neighbor_count = min(3, len(other_gids))  # Take min of 3 or available groups
+        neighbors = random.sample(other_gids, k=neighbor_count) if other_gids else []
         processed_groups[gid]["overview"]["neighbors"] = []
         for nid in neighbors:
             n_data = processed_groups[nid]
