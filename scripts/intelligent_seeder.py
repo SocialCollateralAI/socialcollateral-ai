@@ -265,44 +265,56 @@ def process_ai_batch(batch_groups, model, with_images=False, sample_home_img=Non
         return _batch_cache[cache_key]
     
     try:
-        # 🔥 OPTIMIZED PROMPT - Shorter and more direct
-        combined_prompt = f"Analisis {len(batch_groups)} kelompok microfinance:\n"
+        # 🔥 ULTRA-COMPACT PROMPT for token efficiency
+        combined_prompt = f"Risk analysis {len(batch_groups)} groups:\n"
         
         for i, group_data in enumerate(batch_groups):
-            combined_prompt += f"{i+1}. {group_data}\n"
+            combined_prompt += f"{i+1}: {group_data}\n"
         
-        combined_prompt += """\nJSON Array output:
-[{"group_index":1,"risk_badge":"LOW/MED/HIGH RISK","trust_score":85,"sentiment_text":"Ringkas","asset_condition":"GOOD/AVG/POOR","asset_tags":["Tag1"],"repayment_prediction":90}]"""
+        combined_prompt += """\nJSON:[{"group_index":1,"risk_badge":"LOW RISK","trust_score":85,"sentiment_text":"Good","asset_condition":"GOOD","asset_tags":["Mikro"],"repayment_prediction":90}]"""
         
-        # 🏠🏢 Add sample images if available for better AI context
+        # 🏠🏢 Add single sample image to save tokens (only for small batches)
         vertex_inputs = [combined_prompt]
-        if with_images and sample_home_img and sample_bisnis_img:
+        if with_images and len(batch_groups) <= 3 and sample_home_img:
             home_part = get_cached_image(sample_home_img)
-            bisnis_part = get_cached_image(sample_bisnis_img)
             if home_part:
                 vertex_inputs.append(home_part)
-            if bisnis_part:
-                vertex_inputs.append(bisnis_part)
+                print("   🖼️ Added sample image for context")
         
         resp = model.generate_content(
             vertex_inputs,
             generation_config={
-                "max_output_tokens": 3000,  # Reduced from 4096
-                "temperature": 0.1,  # Lower for faster processing
+                "max_output_tokens": 1500,  # Reduced to avoid MAX_TOKENS
+                "temperature": 0.2,  # Slightly higher for better response
                 "response_mime_type": "application/json",
-                "candidate_count": 1  # Only one candidate for speed
+                "candidate_count": 1,
+                "top_p": 0.8,
+                "top_k": 40
             }
         )
         
-        batch_results = json.loads(resp.text)
-        result = {result['group_index']: result for result in batch_results}
+        # 🔧 ROBUST ERROR HANDLING for AI response
+        if not resp.text or resp.text.strip() == "":
+            print("   ⚠️ Empty AI response, using fallback")
+            return {}
+            
+        try:
+            batch_results = json.loads(resp.text)
+            if not isinstance(batch_results, list):
+                print("   ⚠️ Invalid AI response format, using fallback")
+                return {}
+            result = {result['group_index']: result for result in batch_results if 'group_index' in result}
+        except json.JSONDecodeError as e:
+            print(f"   ⚠️ JSON decode error: {e}, using fallback")
+            return {}
         
         # Cache the result
         _batch_cache[cache_key] = result
         return result
         
     except Exception as e:
-        print(f"      ⚠️ Batch AI Error: {e}")
+        print(f"      ⚠️ Batch AI Error: {str(e)[:100]}...")
+        # Return empty dict to trigger fallback mockup
         return {}
 
 # 🔥 OPTIMIZED IMAGE CACHE - Preload and LRU cache
@@ -414,24 +426,24 @@ def process_data():
         print("⚠️ No bisnis images found, using fallback URLs") 
         bisnis_images = []
     
-    # 🚀 OPTIMIZED PRELOADING - Only valid images
+    # 🚀 MINIMAL PRELOADING - Only essential images for AI
     if home_images or bisnis_images:
-        valid_images = []
+        essential_images = []
         if home_images:
-            valid_images.extend(home_images[:10])  # Limit to first 10 for speed
+            essential_images.append(home_images[0])  # Only first image for AI context
         if bisnis_images:
-            valid_images.extend(bisnis_images[:10])  # Limit to first 10 for speed
+            essential_images.append(bisnis_images[0])  # Only first image for AI context
             
-        print(f"🖼️ Preloading {len(home_images)} home + {len(bisnis_images)} bisnis images (processing {len(valid_images)} samples)...")
-        preload_images(valid_images)
+        print(f"🖼️ Found {len(home_images)} home + {len(bisnis_images)} bisnis images (preloading {len(essential_images)} for AI)...")
+        preload_images(essential_images)
     else:
-        print("🖼️ No images to preload, using placeholders")
+        print("🖼️ No images found, using placeholders")
 
     group_counter = 0
     start_time = time.time()
     
-    # 🚀 OPTIMIZED BATCH PROCESSING - Larger batches for better efficiency
-    BATCH_SIZE = 8  # Increased from 5 to 8 for better throughput
+    # 🚀 TOKEN-OPTIMIZED BATCH PROCESSING - Smaller batches to avoid MAX_TOKENS
+    BATCH_SIZE = 4  # Reduced from 8 to 4 to avoid token limits
     pending_groups = []  # Store groups for batch processing
     batch_ai_results = {}  # Store AI results
 
@@ -537,10 +549,9 @@ def process_data():
             ):
                 batch_texts = [g['text'] for g in pending_groups]
                 try:
-                    # 🏠🏢 Get sample images for better AI context (only if available)
+                    # 🏠 Get sample image for context (simplified to avoid token limits)
                     sample_home = home_images[0] if home_images else None
-                    sample_bisnis = bisnis_images[0] if bisnis_images else None
-                    use_images = sample_home is not None and sample_bisnis is not None
+                    use_images = len(pending_groups) <= 3 and sample_home is not None
                     
                     # Process AI batch without blocking other operations
                     batch_results = process_ai_batch(
@@ -548,7 +559,7 @@ def process_data():
                         model, 
                         with_images=use_images,
                         sample_home_img=sample_home,
-                        sample_bisnis_img=sample_bisnis
+                        sample_bisnis_img=None  # Skip bisnis image to save tokens
                     )
                     for idx, result in batch_results.items():
                         if idx <= len(pending_groups):
