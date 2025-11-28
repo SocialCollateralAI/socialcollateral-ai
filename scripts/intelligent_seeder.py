@@ -28,7 +28,7 @@ print()
 
 # Model options with vision capability flags (us-central1 optimized)
 MODEL_OPTIONS = [
-    {"name": "gemini-2.5-flash-image", "vision": True, "description": "Fast model, text-only (most reliable)"},
+    {"name": "gemini-2.5-pro", "vision": True, "description": "Pro model with vision"},
 ]
 
 print("🌍 Note: Switched to us-central1 region for better Gemini model availability")
@@ -83,12 +83,12 @@ RAW_DATA_DIR = "samples"
 IMAGE_DIR = "data/images"
 OUTPUT_JSON = "data/mock_db.json"
 GCS_BUCKET = None  # if set, upload output to this GCS bucket
-AI_DELAY = 3.0  # Conservative rate limiting  
-MAX_RETRIES = 3
-BACKOFF_MULTIPLIER = 2
+AI_DELAY = 5.0  # Very conservative rate limiting
+MAX_RETRIES = 2  # Fewer retries, faster fallback
+BACKOFF_MULTIPLIER = 3  # Longer waits
 
-# Auto-configure image sending based on model capability
-SEND_IMAGES = selected_model_info["vision"] if selected_model_info else False
+# Auto-configure image sending (disabled for stability)
+SEND_IMAGES = False  # Disabled to avoid model compatibility issues
 print(f"📷 Image analysis: {'Enabled' if SEND_IMAGES else 'Disabled'}")
 
 # --- SETTINGAN DEMO ---
@@ -170,6 +170,25 @@ def run_vertex_ai(prompt, image_path=None):
                 else:
                     print("❌ Max retries reached, skipping AI analysis")
                     return None
+            
+            # Handle model capability errors  
+            if "not supported by this model" in msg or ("400" in msg and attempt == 0):
+                try:
+                    print("⚠️ Retrying with text response...")
+                    resp = model.generate_content(
+                        parts,
+                        generation_config={"max_output_tokens": 200, "temperature": 0.1},
+                        stream=False
+                    )
+                    # Try to extract JSON from text response
+                    import re
+                    json_match = re.search(r'\\{.*\\}', resp.text, re.DOTALL)
+                    if json_match:
+                        return json.loads(json_match.group())
+                    else:
+                        return None
+                except Exception:
+                    pass
             
             # Handle other errors
             print("⚠️ Vertex AI Error:", msg[:100] + ("..." if len(msg) > 100 else ""))
