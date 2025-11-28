@@ -21,7 +21,10 @@ GCP_LOCATION = "asia-southeast2"
 # GOOGLE_API_KEY = "AIzaSyCW9TOk3TyICizVfATqx6qfJI35ztL75co"
 init(project=GCP_PROJECT, location=GCP_LOCATION)
 
-model = GenerativeModel("gemini-1.5-pro-vision")
+print(f"🔧 Initializing Vertex AI: Project={GCP_PROJECT}, Location={GCP_LOCATION}")
+
+model = GenerativeModel("gemini-1.5-flash")
+print("✅ Using model: gemini-1.5-flash (text-only for now)")
 # Path File
 RAW_DATA_DIR = "samples"
 IMAGE_DIR = "data/images"
@@ -30,7 +33,7 @@ GCS_BUCKET = None  # if set, upload output to this GCS bucket
 AI_DELAY = 1.0
 # Control whether we attach images to Vertex AI requests. Set to True
 # only if your selected model supports vision (e.g. a vision-capable Gemini).
-SEND_IMAGES = True
+SEND_IMAGES = False  # Start with text-only to test if basic AI analysis works
 
 # --- SETTINGAN DEMO ---
 GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
