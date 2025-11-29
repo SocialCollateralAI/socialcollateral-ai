@@ -26,7 +26,7 @@ async def get_graph_topology():
                     "label": g["header"]["name"],
                     "x": g.get("x", 0),
                     "y": g.get("y", 0),
-                    "size": g["header"]["member_count"],
+                    "size": g["size"],
                     "color": color,
                     "risk_badge": g["header"]["risk_badge"],  # filter FE
                     "cluster": g["header"]["location_village"],  # filter lokasi
