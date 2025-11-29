@@ -705,16 +705,45 @@ def process_data():
     print(f"   ✅ Parallel processing complete! {len(processed_groups)} groups processed.")
 
     # 6. NEIGHBORS WIRING
+    # Build a mapping of village -> group ids so we can prioritize neighbors
     gids = list(processed_groups.keys())
-    for gid in processed_groups:
-        neighbors = random.sample([x for x in gids if x != gid], k=3)
+    village_map = {}
+    for _gid, _data in processed_groups.items():
+        village = _data.get("header", {}).get("location_village")
+        village_map.setdefault(village, []).append(_gid)
+
+    for gid in list(processed_groups.keys()):
+        my_village = processed_groups[gid].get("header", {}).get("location_village")
+
+        # Candidates from the same village (exclude self)
+        same_village_candidates = [x for x in village_map.get(my_village, []) if x != gid]
+
+        neighbors = []
+        # If there are enough groups in same village, sample from them
+        if len(same_village_candidates) >= 3:
+            neighbors = random.sample(same_village_candidates, k=3)
+        else:
+            # Start with same-village candidates, then fill remaining with random other groups
+            neighbors = same_village_candidates.copy()
+            others = [x for x in gids if x != gid and x not in neighbors]
+            need = 3 - len(neighbors)
+            if others and need > 0:
+                neighbors += random.sample(others, k=min(need, len(others)))
+
         processed_groups[gid]["overview"]["neighbors"] = []
         for nid in neighbors:
             n_data = processed_groups[nid]
-            dist = random.randint(50, 500)
-            rel = "Shared Agent"
+            # distance is synthetic; if lat/lng available we could compute real distance
+            dist = random.randint(20, 500)
+            if n_data.get("header", {}).get("location_village") == my_village:
+                rel = "Same Village"
+            else:
+                rel = "Shared Agent"
+
             if dist < 100:
                 rel = "Geo-Cluster"
+
+            # Preserve high-severity label if neighbor is toxic
             if n_data["type"] == "toxic":
                 rel = "Risk Contagion"
 
