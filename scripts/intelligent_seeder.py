@@ -15,7 +15,7 @@ import vertexai
 from PIL import Image
 
 # ==========================================
-# 🔧 KONFIGURASI PROJECT
+# KONFIGURASI PROJECT
 # ==========================================
 # Config from environment (override at deploy time)
 GCP_PROJECT_ID = "valiant-student-479606-p6"
@@ -34,24 +34,9 @@ GCS_BUCKET = os.getenv("GCS_BUCKET")  # if set, upload output to this GCS bucket
 # --- SETTINGAN DEMO ---
 GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
 MAX_NODES = 100  # Total Node yang dibuat
-AI_LIMIT = 1000  # 20 Node pertama pakai Real AI, sisanya Smart Mockup
+AI_LIMIT = 1000
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))  # Parallel processing threads (reduced for API quota)
 
-# --- VISUAL SIZING SYSTEM ---
-# 🎯 SISTEM UKURAN NODE BERDASARKAN URGENSI PERHATIAN:
-# • HEALTHY (Hijau): 25-50px = Trust Score TINGGI → Node BESAR → Prioritas Modal Tinggi ✅💰
-# • MEDIUM (Kuning): 15-25px = Perlu Review Lebih 🔍⚠️  
-# • TOXIC (Merah): 15-40px = Trust Score RENDAH → Node BESAR → Urgensi Penanganan Tinggi! ❌🚨
-# 
-# LOGIKA VISUAL:
-# - HEALTHY: Makin bagus performance → Makin besar → Prioritas modal
-# - TOXIC: Makin buruk performance → Makin besar → Butuh perhatian segera!
-
-# Setup Gemini
-# if not GOOGLE_API_KEY:
-#     print("⚠️  PERINGATAN: API Key belum diisi. AI calls will be skipped.")
-# else:
-#     genai.configure(api_key=GOOGLE_API_KEY)
 
 model_names = [
     "gemini-2.5-flash",
@@ -75,7 +60,7 @@ else:
     AI_AVAILABLE = True
 
 # ==========================================
-# 🧠 AI PROMPT (Hanya untuk Real AI)
+# AI PROMPT (Hanya untuk Real AI)
 # ==========================================
 GROUP_ANALYSIS_PROMPT = """
 Role: Senior Risk Analyst Microfinance Indonesia.
@@ -96,7 +81,7 @@ Output JSON (Strict JSON, no markdown):
 """
 
 # ==========================================
-# 🛠️ SMART GENERATORS (Menjamin Struktur Lengkap)
+# SMART GENERATORS (Menjamin Struktur Lengkap)
 # ==========================================
 
 
@@ -155,7 +140,7 @@ def generate_random_location():
 
 def generate_trend_data(trust_score, is_asset=False):
     """
-    🔵 SMART MOCK: Membuat array grafik yang masuk akal sesuai skor.
+    SMART MOCK: Membuat array grafik yang masuk akal sesuai skor.
     """
     months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun"]
     data = []
@@ -189,7 +174,7 @@ def generate_trend_data(trust_score, is_asset=False):
 
 
 def generate_risk_members(count, risk_type):
-    """🔵 MOCK: Daftar anggota untuk popup (Wajib ada biar FE aman)"""
+    """MOCK: Daftar anggota untuk popup (Wajib ada biar FE aman)"""
     names = [
         "Sri",
         "Budi",
@@ -221,7 +206,7 @@ def generate_risk_members(count, risk_type):
 
 
 def generate_modal_recommendation(trust_score, risk_status, business_type, node_size):
-    """🎯 SMART MODAL RECOMMENDATION berdasarkan visual size dan risk profile"""
+    """SMART MODAL RECOMMENDATION berdasarkan visual size dan risk profile"""
     
     if risk_status == "HEALTHY" and node_size >= 40:
         return f"🟢 PRIORITAS TINGGI: Kelompok {business_type} sangat layak modal besar. Trust score {trust_score}% excellent!"
@@ -240,7 +225,7 @@ def generate_modal_recommendation(trust_score, risk_status, business_type, node_
 
 
 def optimize_image_memory(image_path, max_size=800, quality=85):
-    """🚀 OPTIMIZED: Resize image to reduce memory footprint and upload latency"""
+    """OPTIMIZED: Resize image to reduce memory footprint and upload latency"""
     try:
         if "placeholder" in image_path or not os.path.exists(image_path):
             return None
@@ -269,7 +254,7 @@ def optimize_image_memory(image_path, max_size=800, quality=85):
 # 🚀 PARALLEL WORKER FUNCTION
 # ==========================================
 def process_single_group(args):
-    """🔥 WORKER: Process a single group in parallel"""
+    """WORKER: Process a single group in parallel"""
     (
         group_counter, batch_ids, cust_map, cust_loans, loan_loc,
         home_images, bisnis_images, AI_AVAILABLE
@@ -465,7 +450,7 @@ def process_single_group(args):
 
         node_size = calculate_node_size(trust_score, risk_status)
         
-        # 🚨 DEBUG: Print size calculation for verification
+        # DEBUG: Print size calculation for verification
         print(f"      📊 {group_id}: {risk_status} | Trust: {trust_score} → Size: {node_size}px")
 
         # Generate random location
@@ -593,7 +578,7 @@ def process_single_group(args):
 
 
 # ==========================================
-# 🚀 MAIN PARALLEL PROCESSOR
+# MAIN PARALLEL PROCESSOR
 # ==========================================
 def process_data():
     global AI_AVAILABLE
@@ -685,7 +670,7 @@ def process_data():
         tasks_args.append(task_args)
         group_counter += 1
 
-    # 5. 🔥 PARALLEL EXECUTION
+    # 5. PARALLEL EXECUTION
     print(f"   🚀 Starting {len(tasks_args)} parallel tasks...")
     processed_groups = {}
     
