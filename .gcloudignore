@@ -1,0 +1,29 @@
+# .gcloudignore — controls what is uploaded when using `gcloud run deploy --source .`
+# Keep this file in the project root so images under data/images are included.
+
+# Ignore common virtualenv and IDE folders
+venv/
+.env
+.env.*
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+node_modules/
+.DS_Store
+.vscode/
+.idea/
+*.log
+
+# Git metadata (we don't need to upload .git)
+.git/
+
+# Keep the data/images directory — include all files under it
+!data/
+!data/images/
+!data/images/**
+
+# Optionally ignore large generated DB if you don't want it in the build
+# Uncomment to exclude the mock DB from the source archive
+#data/mock_db.json
