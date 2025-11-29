@@ -1,7 +1,8 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from app.api import graph, groups
 
@@ -27,6 +28,30 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "message": "SocialCollateral AI Backend is running"}
+
+
+@app.get("/api/v1/images/{image_type}/{filename}")
+async def get_image(image_type: str, filename: str):
+    """
+    Serve images with fallback to placeholder
+    image_type: 'home' or 'bisnis'
+    """
+    if image_type not in ["home", "bisnis"]:
+        raise HTTPException(status_code=400, detail="Invalid image type")
+    
+    image_path = f"data/images/{image_type}/{filename}"
+    
+    # Check if specific image exists
+    if os.path.exists(image_path):
+        return FileResponse(image_path)
+    
+    # Fallback to placeholder
+    placeholder_path = f"data/images/placeholder_{image_type}.jpg"
+    if os.path.exists(placeholder_path):
+        return FileResponse(placeholder_path)
+    
+    # Final fallback - return 404 if no placeholder exists
+    raise HTTPException(status_code=404, detail="Image not found")
 
 
 # Serve static images folder so URLs like /static/images/<subpath>
