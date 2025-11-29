@@ -76,7 +76,8 @@ Output JSON (Strict JSON, no markdown):
   "sentiment_text": "Satu kalimat ringkas bahasa Indonesia tentang sentimen kelompok.",
   "asset_condition": "GOOD / AVERAGE / POOR",
   "asset_tags": ["Tag1", "Tag2"],
-  "repayment_prediction": (Integer 0-100)
+  "repayment_prediction": (Integer 0-100),
+  "recommendation_text": "Teks rekomendasi modal (misal: 'Prioritas Tinggi: Kelompok sangat layak modal besar.')"
 }}
 """
 
@@ -94,11 +95,6 @@ def generate_group_name(index):
         "Makmur",
         "Sentosa",
         "Barokah",
-        "Sinar",
-        "Harapan",
-        "Cahaya",
-        "Mandiri",
-        "Bersama",
     ]
     noun = [
         "Jaya",
@@ -106,11 +102,6 @@ def generate_group_name(index):
         "Lestari",
         "Berkah",
         "Usaha",
-        "Karya",
-        "Bina",
-        "Dana",
-        "Sahabat",
-        "Mitra",
     ]
     random.seed(index)
     name = f"{random.choice(prefix)} {random.choice(adjective)} {random.choice(noun)} {index}"
@@ -121,15 +112,12 @@ def generate_group_name(index):
 def generate_random_location():
     """Generate random Jabodetabek location"""
     jabodetabek_cities = [
-        "Jakarta Pusat", "Jakarta Utara", "Jakarta Selatan", "Jakarta Timur", "Jakarta Barat",
-        "Bogor", "Depok", "Tangerang", "Bekasi", "Tangerang Selatan"
+        "Jakarta Pusat", "Jakarta Utara", "Jakarta Selatan", "Jakarta Timur", "Jakarta Barat"
     ]
     
     villages = [
         "Desa Maju Jaya", "Desa Sejahtera", "Desa Makmur", "Desa Sentosa", "Desa Barokah",
-        "Desa Sinar Harapan", "Desa Cahaya Baru", "Desa Mandiri", "Desa Bersama", "Desa Lestari",
-        "Kelurahan Merdeka", "Kelurahan Bina Karya", "Kelurahan Sukamaju", "Kelurahan Harmoni",
-        "Kampung Damai", "Kampung Rukun", "Kampung Gotong Royong", "Kampung Makmur Jaya"
+        "Desa Sinar Harapan", "Desa Cahaya Baru", "Desa Mandiri", "Desa Bersama",
     ]
     
     return {
@@ -408,6 +396,14 @@ def process_single_group(args):
             else:  # TOXIC
                 # TOXIC: Trust score 10-55 (varied, lower = bigger size)
                 base_trust = random.randint(10, 55)
+            
+            rec_text = ""
+            if base_trust >= 80:
+                rec_text = f"🟢 LAYAK MODAL: Kelompok {common_biz} dapat diberikan modal standar. (Mock)"
+            elif base_trust >= 50:
+                rec_text = f"🟡 REVIEW DETAIL: Kelompok {common_biz} perlu evaluasi mendalam. (Mock)"
+            else:
+                rec_text = f"🔴 TIDAK LAYAK: Kelompok {common_biz} tidak direkomendasikan untuk modal. (Mock)"
                 
             ai_data = {
                 "risk_badge": f"{risk_status} RISK",
@@ -416,6 +412,7 @@ def process_single_group(args):
                 "asset_condition": "AVERAGE",
                 "asset_tags": ["Usaha Mikro", "Bangunan Permanen"],
                 "repayment_prediction": base_trust,  # Use trust_score for consistency
+                "recommendation_text": rec_text,
             }
 
         # --- C. CONSTRUCT JSON (FULL SCHEMA) ---
@@ -564,7 +561,8 @@ def process_single_group(args):
                         "scenario": "Intervention",
                     },
                 },
-                "recommendation_text": generate_modal_recommendation(trust_score, risk_status, common_biz, node_size),
+                # "recommendation_text": generate_modal_recommendation(trust_score, risk_status, common_biz, node_size),
+                "recommendation_text": ai_data.get("recommendation_text", "Rekomendasi dari AI tidak tersedia."),
             },
             "decision": {
                 "last_audit": f"Agent {random.choice(['Budi', 'Sari'])}",
