@@ -1,71 +1,31 @@
-# SocialCollateral AI - Backend Engine (MVP)
+# SocialCollateral AI – Backend Engine (FastAPI)
 
-Backend service berbasis FastAPI yang berfungsi sebagai "Otak Risiko" untuk aplikasi Jaringan Amanah Amartha.
+**Team Name:** Tim suksemustanice  
+Submission untuk **Amartha x GDG Jakarta Hackathon 2025**
 
-Menyediakan API untuk Visualisasi Graf (Sigma.js) dan Analisis Multi-Lensa (NLP, CV, Graph Metrics).
+Backend ini merupakan “Brain” dari sistem SocialCollateral AI yang menghitung *Group Trust Score* menggunakan Social Graph Analysis, NLP, dan Computer Vision.
 
-  
+---
 
-## READY FOR DEPLOYMENT
+## 🔗 Deployment & Live Demo
 
-### Repositori Struktur
+| Service | URL |
+|--------|-----|
+| **Backend API** | https://socialcollateral-ai-production.up.railway.app |
+| **API Docs (Swagger)** | https://socialcollateral-ai-production.up.railway.app/docs |
 
--   `app/` : Kode utama API (Endpoints & Logic).
-    
--   `scripts/` : **The Brain**. Data Generator (`intelligent_seeder.py`).
-    
--   `data/` : Database JSON hasil generate.
-    
+---
 
-  
+## 🚀 Tech Stack
 
-## API Endpoints
+- **FastAPI** – REST API Framework  
+- **NetworkX** – Social Graph Analysis  
+- **Google Gemini** – NLP Metric (sentimen & trust)  
+- **Google Vision API** – CV Metric (verifikasi foto aset)  
+- **Uvicorn** – ASGI Web Server  
 
-Base URL Lokal: http://localhost:8000/api/v1
+---
 
-Base URL Cloud: https://socialcollateral-ai-production.up.railway.app/api/v1
-
-Base URL Swagger / API Docs: https://socialcollateral-ai-production.up.railway.app/docs
-
-| **Method** | **Endpoint** | **Deskripsi** |
-| --- | --- | --- |
-| `GET` | `/graph` | Mengembalikan Nodes & Edges lengkap untuk Sigma.js. |
-| `GET` | `/groups/{id}` | Mengembalikan detail lengkap (Risk, NLP, CV) untuk Popup Dashboard. |
-
-## Setup & Run (Lokal)
-
-### 1\. Install Dependencies
-
-Pastikan Python 3.9+ sudah terinstall.
-
-    pip install -r requirements.txt
-    
-
-### 2\. Generate MOCK DB (WAJIB)
-
-Jalankan script ini setiap kali ingin me-reset data atau mengubah narasi.
-
-    python scripts/intelligent_seeder.py
-    
-
-_Output: Cek folder `data/`, pastikan file `mock_db.json` terupdate._
-
-### 3\. Run Server API
-
-    uvicorn app.main:app --reload
-    
-
-### 4\. Akses Swagger UI
-
-Buka browser: **`http://localhost:8000/docs`**
-
-## ☁️ Cara Deploy (Render/Railway)
-
-1.  Pastikan `requirements.txt` ada di root folder.
-    
-2.  Pastikan `mock_db.json` sudah ter-generate dan ada di repo (jangan di gitignore).
-    
-3.  **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-    
-
-**Tim Suksemustanice - Amartha x GDG Jakarta Hackathon 2025**
+## 📁 Repository Structure
+```
+socialcollateral-ai/    → Backend (FastAPI, Graph Logic, AI Integration)
