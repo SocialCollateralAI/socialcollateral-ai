@@ -29,7 +29,6 @@ async def get_graph_topology():
                     "size": g["size"],
                     "color": color,
                     "risk_badge": g["header"]["risk_badge"],  # filter FE
-                    "cluster": g["header"]["location_village"],  # filter lokasi
                     "location_city": g["header"]["location_city"],
                     "location_village": g["header"]["location_village"],
                     "trust_score": g["header"]["trust_score"],
