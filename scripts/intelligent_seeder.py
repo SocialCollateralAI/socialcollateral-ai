@@ -33,7 +33,7 @@ GCS_BUCKET = os.getenv("GCS_BUCKET")  # if set, upload output to this GCS bucket
 
 # --- SETTINGAN DEMO ---
 GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
-MAX_NODES = 20  # Total Node yang dibuat
+MAX_NODES = 100  # Total Node yang dibuat
 AI_LIMIT = 1000
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))  # Parallel processing threads (reduced for API quota)
 
