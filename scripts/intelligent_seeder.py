@@ -726,6 +726,8 @@ def process_data():
         city_map.setdefault(city, []).append(_gid)
         village_map.setdefault((city, village), []).append(_gid)
 
+    TARGET_NEIGHBORS = 5
+
     for gid in list(processed_groups.keys()):
         my_city = processed_groups[gid].get("header", {}).get("location_city")
         my_village = processed_groups[gid].get("header", {}).get("location_village")
@@ -735,8 +737,8 @@ def process_data():
 
         neighbors = []
 
-        if len(same_village_candidates) >= 3:
-            neighbors = random.sample(same_village_candidates, k=3)
+        if len(same_village_candidates) >= TARGET_NEIGHBORS:
+            neighbors = random.sample(same_village_candidates, k=TARGET_NEIGHBORS)
         else:
             # Start with same-village candidates
             neighbors = same_village_candidates.copy()
@@ -749,7 +751,7 @@ def process_data():
                 neighbors += random.sample(same_city_candidates, k=take)
 
             # 3) If still need, fill with other groups from other cities
-            need = 3 - len(neighbors)
+            need = TARGET_NEIGHBORS - len(neighbors)
             if need > 0:
                 others = [x for x in gids if x != gid and x not in neighbors]
                 if others:
