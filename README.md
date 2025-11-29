@@ -19,7 +19,7 @@ Backend ini merupakan “Brain” dari sistem SocialCollateral AI yang menghitun
 ## 🚀 Tech Stack
 
 - **FastAPI** – REST API Framework  
-- **NetworkX** – Social Graph Analysis  
+- **Google Gemini** – Social Graph Analysis  
 - **Google Gemini** – NLP Metric (sentimen & trust)  
 - **Google Vision API** – CV Metric (verifikasi foto aset)  
 - **Uvicorn** – ASGI Web Server  
