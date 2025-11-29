@@ -36,18 +36,44 @@ async def get_image(filename: str):
     Simple endpoint to serve images directly
     Usage: /images/placeholder_home.jpg or /images/sample1.jpg
     """
-    # Try different locations
-    possible_paths = [
-        f"data/images/{filename}",
-        f"data/images/home/{filename}",
-        f"data/images/bisnis/{filename}"
+    # Try different directories and common extensions so requests like
+    # /images/house_0.jpg will match files named house_0.jpeg, house_0.png, etc.
+    possible_dirs = [
+        os.path.join("data", "images"),
+        os.path.join("data", "images", "home"),
+        os.path.join("data", "images", "bisnis"),
     ]
-    
-    for image_path in possible_paths:
-        if os.path.exists(image_path):
-            return FileResponse(image_path)
-    
-    # If not found, return 404
+
+    # Common extensions to try when the requested name might differ
+    common_exts = [".jpg", ".jpeg", ".png", ".webp"]
+
+    # First, try the filename exactly as provided in each directory
+    for d in possible_dirs:
+        path_exact = os.path.join(d, filename)
+        if os.path.exists(path_exact):
+            return FileResponse(path_exact)
+
+    # Split name/extension and try variations
+    name, ext = os.path.splitext(filename)
+
+    # If caller didn't provide an extension, try common ones
+    if not ext:
+        for d in possible_dirs:
+            for e in common_exts:
+                p = os.path.join(d, name + e)
+                if os.path.exists(p):
+                    return FileResponse(p)
+    else:
+        # Caller provided an extension; also try alternative extensions
+        for d in possible_dirs:
+            for e in common_exts:
+                if e == ext.lower():
+                    continue
+                p = os.path.join(d, name + e)
+                if os.path.exists(p):
+                    return FileResponse(p)
+
+    # Not found
     raise HTTPException(status_code=404, detail=f"Image {filename} not found")
 
 
