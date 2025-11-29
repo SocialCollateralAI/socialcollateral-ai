@@ -690,47 +690,64 @@ def process_data():
     print(f"   ✅ Parallel processing complete! {len(processed_groups)} groups processed.")
 
     # 6. NEIGHBORS WIRING
-    # Build a mapping of village -> group ids so we can prioritize neighbors
+    # Build mappings for city and village so we can prioritize neighbors correctly.
     gids = list(processed_groups.keys())
+    city_map = {}
     village_map = {}
     for _gid, _data in processed_groups.items():
+        city = _data.get("header", {}).get("location_city")
         village = _data.get("header", {}).get("location_village")
-        village_map.setdefault(village, []).append(_gid)
+        city_map.setdefault(city, []).append(_gid)
+        village_map.setdefault((city, village), []).append(_gid)
 
     for gid in list(processed_groups.keys()):
+        my_city = processed_groups[gid].get("header", {}).get("location_city")
         my_village = processed_groups[gid].get("header", {}).get("location_village")
 
-        # Candidates from the same village (exclude self)
-        same_village_candidates = [x for x in village_map.get(my_village, []) if x != gid]
+        # 1) Prefer neighbors from same city and same village (city must match)
+        same_village_candidates = [x for x in village_map.get((my_city, my_village), []) if x != gid]
 
         neighbors = []
-        # If there are enough groups in same village, sample from them
+
         if len(same_village_candidates) >= 3:
             neighbors = random.sample(same_village_candidates, k=3)
         else:
-            # Start with same-village candidates, then fill remaining with random other groups
+            # Start with same-village candidates
             neighbors = same_village_candidates.copy()
-            others = [x for x in gids if x != gid and x not in neighbors]
-            need = 3 - len(neighbors)
-            if others and need > 0:
-                neighbors += random.sample(others, k=min(need, len(others)))
 
+            # 2) Fill from same city (other villages) if still need
+            same_city_candidates = [x for x in city_map.get(my_city, []) if x != gid and x not in neighbors]
+            need = 3 - len(neighbors)
+            if same_city_candidates and need > 0:
+                take = min(need, len(same_city_candidates))
+                neighbors += random.sample(same_city_candidates, k=take)
+
+            # 3) If still need, fill with other groups from other cities
+            need = 3 - len(neighbors)
+            if need > 0:
+                others = [x for x in gids if x != gid and x not in neighbors]
+                if others:
+                    neighbors += random.sample(others, k=min(need, len(others)))
+
+        # Build neighbor entries with relation labels
         processed_groups[gid]["overview"]["neighbors"] = []
         for nid in neighbors:
             n_data = processed_groups[nid]
-            # distance is synthetic; if lat/lng available we could compute real distance
+            # synthetic distance; can be replaced with haversine if lat/lng used
             dist = random.randint(20, 500)
-            if n_data.get("header", {}).get("location_village") == my_village:
+
+            # relation priority: Risk Contagion (if toxic), Same Village, Same City, Geo-Cluster (if close), Shared Agent
+            if n_data.get("type") == "toxic":
+                rel = "Risk Contagion"
+            elif n_data.get("header", {}).get("location_city") == my_city and n_data.get("header", {}).get("location_village") == my_village:
                 rel = "Same Village"
+            elif n_data.get("header", {}).get("location_city") == my_city:
+                rel = "Same City"
             else:
                 rel = "Shared Agent"
 
-            if dist < 100:
+            if dist < 100 and rel != "Risk Contagion":
                 rel = "Geo-Cluster"
-
-            # Preserve high-severity label if neighbor is toxic
-            if n_data["type"] == "toxic":
-                rel = "Risk Contagion"
 
             processed_groups[gid]["overview"]["neighbors"].append(
                 {
