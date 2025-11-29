@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+import logging
 
 from app.api import graph, groups
 
@@ -50,7 +51,9 @@ async def get_image(filename: str):
     # First, try the filename exactly as provided in each directory
     for d in possible_dirs:
         path_exact = os.path.join(d, filename)
+        logging.info("Looking for image: %s", path_exact)
         if os.path.exists(path_exact):
+            logging.info("Found image: %s", path_exact)
             return FileResponse(path_exact)
 
     # Split name/extension and try variations
@@ -74,7 +77,26 @@ async def get_image(filename: str):
                     return FileResponse(p)
 
     # Not found
+    logging.warning("Image not found for request '%s'. Attempted dirs: %s", filename, possible_dirs)
     raise HTTPException(status_code=404, detail=f"Image {filename} not found")
+
+
+@app.get("/debug/images")
+def list_images():
+    """Debug endpoint: returns files under data/images and subdirectories.
+    Use to verify which images are packaged into the running container.
+    """
+    root = os.path.join("data", "images")
+    result = {}
+    if not os.path.exists(root):
+        return {"exists": False, "message": "data/images not present in container"}
+
+    for dirpath, dirnames, filenames in os.walk(root):
+        rel = os.path.relpath(dirpath, root)
+        key = rel if rel != "." else "root"
+        result[key] = filenames
+
+    return {"exists": True, "files": result}
 
 
 # Serve static images folder so URLs like /static/images/<subpath>
