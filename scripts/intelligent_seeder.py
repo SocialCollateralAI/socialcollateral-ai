@@ -421,6 +421,34 @@ def process_single_group(args):
         # --- C. CONSTRUCT JSON (FULL SCHEMA) ---
         trust_score = ai_data.get("trust_score", 70)
 
+        # Reconcile final risk status using trust_score to ensure consistency
+        # Priority: trust_score defines the semantic risk type presented to FE
+        # New thresholds requested:
+        #   HEALTH: trust_score >= 80
+        #   MEDIUM: 26 <= trust_score < 80
+        #   LOW: trust_score <= 25  (mapped to internal 'TOXIC')
+        final_risk_status = None
+        final_node_color = None
+        if trust_score >= 80:
+            final_risk_status = "HEALTHY"
+            final_node_color = "healthy"
+        elif trust_score > 25:
+            # 26..79 -> MEDIUM
+            final_risk_status = "MEDIUM"
+            final_node_color = "medium"
+        else:
+            # 0..25 -> LOW (keep internal toxic semantics)
+            final_risk_status = "TOXIC"
+            final_node_color = "toxic"
+
+        # If initial risk_status (from avg_dpd) differs from final, log for debugging
+        if final_risk_status != risk_status:
+            print(f"      ℹ️ Reconciling risk for {group_id}: avg_dpd-based={risk_status} -> trust_score-based={final_risk_status}")
+
+        # Use reconciled values going forward
+        risk_status = final_risk_status
+        node_color = final_node_color
+
         # 🎯 VISUAL SIZE LOGIC - IMPROVED FOR CLEAR DIFFERENTIATION
         def calculate_node_size(trust_score, risk_status):
             """
@@ -470,7 +498,7 @@ def process_single_group(args):
                 "location_city": location["city"],
                 "location_village": location["village"],
                 "member_count": len(batch_ids),
-                "risk_badge": ai_data.get("risk_badge"),
+                "risk_badge": ai_data.get("risk_badge", f"{risk_status} RISK"),
                 "trust_score": trust_score,
                 "loan_eligibility": "Eligible" if trust_score > 70 else "Review",
                 "total_loan_amount": int(total_loan),
