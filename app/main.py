@@ -30,28 +30,25 @@ def health_check():
     return {"status": "healthy", "message": "SocialCollateral AI Backend is running"}
 
 
-@app.get("/api/v1/images/{image_type}/{filename}")
-async def get_image(image_type: str, filename: str):
+@app.get("/images/{filename}")
+async def get_image(filename: str):
     """
-    Serve images with fallback to placeholder
-    image_type: 'home' or 'bisnis'
+    Simple endpoint to serve images directly
+    Usage: /images/placeholder_home.jpg or /images/sample1.jpg
     """
-    if image_type not in ["home", "bisnis"]:
-        raise HTTPException(status_code=400, detail="Invalid image type")
+    # Try different locations
+    possible_paths = [
+        f"data/images/{filename}",
+        f"data/images/home/{filename}",
+        f"data/images/bisnis/{filename}"
+    ]
     
-    image_path = f"data/images/{image_type}/{filename}"
+    for image_path in possible_paths:
+        if os.path.exists(image_path):
+            return FileResponse(image_path)
     
-    # Check if specific image exists
-    if os.path.exists(image_path):
-        return FileResponse(image_path)
-    
-    # Fallback to placeholder
-    placeholder_path = f"data/images/placeholder_{image_type}.jpg"
-    if os.path.exists(placeholder_path):
-        return FileResponse(placeholder_path)
-    
-    # Final fallback - return 404 if no placeholder exists
-    raise HTTPException(status_code=404, detail="Image not found")
+    # If not found, return 404
+    raise HTTPException(status_code=404, detail=f"Image {filename} not found")
 
 
 # Serve static images folder so URLs like /static/images/<subpath>

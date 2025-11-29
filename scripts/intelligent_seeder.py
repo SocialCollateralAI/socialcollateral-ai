@@ -337,18 +337,18 @@ def process_single_group(args):
         home_img_path = home_images[group_counter % len(home_images)]
         bisnis_img_path = bisnis_images[group_counter % len(bisnis_images)]
         
-        # Generate URLs with Cloud Run base URL
+        # Generate URLs with Cloud Run base URL - Simple endpoint
         CLOUD_RUN_URL = "https://socialcollateral-api-228221306168.asia-southeast2.run.app"
         
         if "placeholder" not in home_img_path and os.path.exists(home_img_path):
-            home_img_url = f"{CLOUD_RUN_URL}/static/images/home/{os.path.basename(home_img_path)}"
+            home_img_url = f"{CLOUD_RUN_URL}/images/{os.path.basename(home_img_path)}"
         else:
-            home_img_url = f"{CLOUD_RUN_URL}/static/images/placeholder_home.jpg"
+            home_img_url = f"{CLOUD_RUN_URL}/images/placeholder_home.jpg"
             
         if "placeholder" not in bisnis_img_path and os.path.exists(bisnis_img_path):
-            bisnis_img_url = f"{CLOUD_RUN_URL}/static/images/bisnis/{os.path.basename(bisnis_img_path)}"
+            bisnis_img_url = f"{CLOUD_RUN_URL}/images/{os.path.basename(bisnis_img_path)}"
         else:
-            bisnis_img_url = f"{CLOUD_RUN_URL}/static/images/placeholder_bisnis.jpg"
+            bisnis_img_url = f"{CLOUD_RUN_URL}/images/placeholder_bisnis.jpg"
 
         # --- B. AI INTELLIGENCE WITH RETRY LOGIC ---
         ai_data = {}
