@@ -40,8 +40,7 @@ This repository maintains three distinct branches representing different stages 
 - **For GCP setup study**: `pre-hackathon`
 - **For complete implementation**: `mvp-hackathon`
 
----
-
+<!--
 ## API Endpoints
 
 **Base URL (Local)**: `http://localhost:8000/api/v1`
@@ -54,6 +53,7 @@ This repository maintains three distinct branches representing different stages 
 **Interactive Documentation**: Available at `/docs` (FastAPI auto-generated Swagger UI)
 
 ---
+-->
 
 <!--
 ## Technology Stack
@@ -62,9 +62,8 @@ This repository maintains three distinct branches representing different stages 
 - **Data Processing**: Intelligent seeder with schema validation
 - **Deployment**: Vercel (Serverless Functions)
 - **Database**: JSON-based mock storage (POC phase)
--->
-
 ---
+-->
 
 <!--
 ## Local Development
@@ -100,9 +99,8 @@ This repository maintains three distinct branches representing different stages 
    ```
    http://localhost:8000/docs
    ```
--->
-
 ---
+-->
 
 <!--
 ## Deployment
@@ -121,9 +119,8 @@ This repository is configured for Vercel deployment via `vercel.json`.
 4. Update DNS provider with CNAME record
 
 **Environment**: Production deployments auto-trigger from `main` branch.
--->
-
 ---
+-->
 
 <!--
 ## Project Context
