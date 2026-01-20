@@ -29,6 +29,8 @@ This repository maintains three distinct branches representing different stages 
 - Full GCP implementation (Vertex AI, Cloud Vision, pre-computed inference)
 - Minor schema additions to accommodate real-world data requirements
 
+> **Development Context**: This branch represents a functional MVP developed under hackathon time constraints (24 hours), optimized for demonstration rather than production deployment.
+
 > **Why not use `mvp-hackathon` as main?**  
 > The competition version relied on GCP credits which have been exhausted. This branch structure preserves the complete evolution from concept to implementation, serving as comprehensive technical documentation.
 
