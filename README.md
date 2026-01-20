@@ -55,15 +55,18 @@ This repository maintains three distinct branches representing different stages 
 
 ---
 
+<!--
 ## Technology Stack
 
 - **Framework**: FastAPI (Python 3.9+)
 - **Data Processing**: Intelligent seeder with schema validation
 - **Deployment**: Vercel (Serverless Functions)
 - **Database**: JSON-based mock storage (POC phase)
+-->
 
 ---
 
+<!--
 ## Local Development
 
 ### Prerequisites
@@ -97,9 +100,11 @@ This repository maintains three distinct branches representing different stages 
    ```
    http://localhost:8000/docs
    ```
+-->
 
 ---
 
+<!--
 ## Deployment
 
 ### Vercel Setup
@@ -116,15 +121,18 @@ This repository is configured for Vercel deployment via `vercel.json`.
 4. Update DNS provider with CNAME record
 
 **Environment**: Production deployments auto-trigger from `main` branch.
+-->
 
 ---
 
+<!--
 ## Project Context
 
 This backend was developed for a national-scale fintech hackathon, reaching the Top 15 finalists. The project demonstrates a novel approach to microfinance risk assessment using social graph analytics, natural language processing, and computer vision—all applied to the Grameen Bank framework implemented by Amartha.
 
-**Competition**: Amartha x Google Developer Groups Jakarta Hackathon 2025  
+**Competition**: Amartha x Google Developer Groups Jakarta Hackathon 2025
 **Team**: Tim Suksemustanice
+-->
 
 ---
 
