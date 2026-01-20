@@ -139,6 +139,6 @@ Copyright © 2025 Tim Suksemustanice. All Rights Reserved.
 
 This project is maintained as a technical portfolio and research documentation. The code, algorithms, and system architecture are proprietary intellectual property.
 
-For commercial licensing, collaboration, or technical inquiries, please contact the team.
+For commercial licensing, collaboration, or technical inquiries, please contact the [team](https://www.linkedin.com/in/firyan-fatih-fadilah).
 
 See [LICENSE](./LICENSE) for full terms.
