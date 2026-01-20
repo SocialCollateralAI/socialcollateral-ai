@@ -128,4 +128,10 @@ This backend was developed for a national-scale fintech hackathon, reaching the 
 
 ## License
 
-This project is maintained as a technical portfolio and documentation archive.
+Copyright © 2025 Tim Suksemustanice. All Rights Reserved.
+
+This project is maintained as a technical portfolio and research documentation. The code, algorithms, and system architecture are proprietary intellectual property.
+
+For commercial licensing, collaboration, or technical inquiries, please contact the team.
+
+See [LICENSE](./LICENSE) for full terms.
