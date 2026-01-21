@@ -28,7 +28,5 @@ This is the preparation branch created before the live hackathon, containing:
 - `data/mock_db.json` - Sample pre-computed results
 - `requirements.txt` - Added GCP dependencies
 
----
-
-**Team**: Tim Suksemustanice  
-**Competition**: Amartha x GDG Jakarta Hackathon 2025
+<!-- **Team**: Tim Suksemustanice
+**Competition**: Amartha x GDG Jakarta Hackathon 2025 -->
