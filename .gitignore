@@ -3,5 +3,7 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
-.vscode/
+# VSCode - allow settings.json but ignore other files
+.vscode/*
+!.vscode/settings.json
 .idea/
