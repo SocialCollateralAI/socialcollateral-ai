@@ -15,24 +15,35 @@ import vertexai
 from PIL import Image
 
 # ==========================================
-# KONFIGURASI PROJECT
+# GCP PROJECT CONFIGURATION
 # ==========================================
-# Config from environment (override at deploy time)
-GCP_PROJECT_ID = "valiant-student-479606-p6"
+# NOTE: This configuration represents the setup used during the
+# Amartha x GDG Jakarta 2025 Hackathon. GCP credits have been exhausted
+# and API keys are no longer active. This code is preserved for
+# documentation and portfolio purposes.
+#
+# To run this seeder with live GCP inference, you would need:
+# - Active GCP project with Vertex AI enabled
+# - Valid API credentials
+# - Sufficient quota allocation
+
+# Historical GCP Project ID (no longer active)
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "valiant-student-479606-p6")
 GCP_LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 
 vertexai.init(project=GCP_PROJECT_ID, location=GCP_LOCATION)
+
+# Historical Google API Key (expired - for documentation reference only)
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "AIzaSyCW9TOk3TyICizVfATqx6qfJI35ztL75co")
 
-# Path File
+# File paths
 RAW_DATA_DIR = os.getenv("RAW_DATA_DIR", "samples")
 IMAGE_DIR = os.getenv("IMAGE_DIR", "data/images")
 OUTPUT_JSON = os.getenv("OUTPUT_JSON", "data/mock_db.json")
-GCS_BUCKET = os.getenv("GCS_BUCKET")  # if set, upload output to this GCS bucket
+GCS_BUCKET = os.getenv("GCS_BUCKET")  # Optional: upload output to GCS bucket
 
-# --- SETTINGAN DEMO ---
-GROUP_SIZE = 15  # 1 Kelompok = 15 Nasabah
+# Demo configuration
+GROUP_SIZE = 15  # Members per group (Amartha group lending model)
 MAX_NODES = 100  # Total Node yang dibuat
 AI_LIMIT = 1000
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))  # Parallel processing threads (reduced for API quota)
