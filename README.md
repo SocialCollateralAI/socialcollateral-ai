@@ -8,26 +8,10 @@ This repository maintains three distinct branches representing different stages 
 
 ### Branch Overview
 
-**`main`** - Baseline Architecture
-
-- Initial schema and intelligent seeder implementation
-- Matches technical specification from original proposal
-- Uses Unsplash API for placeholder images
-- Clean foundation for POC (Proof of Concept)
-
-**`pre-hackathon`** - GCP Integration Preparation
-
-- Pre-competition preparation branch (night before demo day)
-- Includes GCP service configuration
-- Setup for Vertex AI/Gemini integration
-- Pre-computed data processing pipeline
-
-**`mvp-hackathon`** - Competition Demo Version
-
-- Production demo used during live competition
-- Integrated with actual Amartha data (CSV + images)
-- Full GCP implementation (Vertex AI, Cloud Vision, pre-computed inference)
-- Minor schema additions to accommodate real-world data requirements
+|                 | **`main`**                                                                                                                                                                                                                    | **`pre-hackathon`**                                                                                                                                                                                     | **`mvp-hackathon`**                                                                                                                                                                                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Description** | Baseline Architecture                                                                                                                                                                                                         | GCP Integration Preparation                                                                                                                                                                             | Competition Demo Version                                                                                                                                                                                                                                                 |
+| **Scope**       | • Initial schema and intelligent seeder implementation<br><br>• Matches technical specification from original proposal<br><br>• Uses Unsplash API for placeholder images<br><br>• Clean foundation for POC (Proof of Concept) | • Pre-competition preparation branch (night before demo day)<br><br>• Includes GCP service configuration<br><br>• Setup for Vertex AI/Gemini integration<br><br>• Pre-computed data processing pipeline | • Production demo used during live competition<br><br>• Integrated with actual Amartha data (CSV + images)<br><br>• Full GCP implementation (Vertex AI, Cloud Vision, pre-computed inference<br><br>• Minor schema additions to accommodate real-world data requirements |
 
 > **Development Context**: This branch represents a functional MVP developed under hackathon time constraints (24 hours), optimized for demonstration rather than production deployment.
 
@@ -40,20 +24,17 @@ This repository maintains three distinct branches representing different stages 
 - **For GCP setup study**: `pre-hackathon`
 - **For complete implementation**: `mvp-hackathon`
 
-<!--
 ## API Endpoints
 
-**Base URL (Local)**: `http://localhost:8000/api/v1`
+**Production URL**: `https://api.socialcollateral.id/api/v1`  
+**Local URL**: `http://localhost:8000/api/v1`
 
 | Method | Endpoint       | Description                                                               |
 | ------ | -------------- | ------------------------------------------------------------------------- |
 | `GET`  | `/graph`       | Returns complete node/edge graph data for Sigma.js visualization          |
 | `GET`  | `/groups/{id}` | Returns detailed group analysis (Graph metrics, NLP sentiment, CV assets) |
 
-**Interactive Documentation**: Available at `/docs` (FastAPI auto-generated Swagger UI)
-
----
--->
+**Interactive Documentation**: `https://api.socialcollateral.id/docs` (FastAPI auto-generated Swagger UI)
 
 <!--
 ## Technology Stack
