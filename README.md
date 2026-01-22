@@ -1,4 +1,4 @@
-# SocialCollateral AI - Backend Service
+# SocialCollateral AI - Backend & AI Service
 
 Backend API service for **Jaringan Amanah** (The Amanah Network), a Social Graph Engine built for the Amartha ecosystem. Provides RESTful endpoints for network visualization and multi-perspective risk analysis.
 
