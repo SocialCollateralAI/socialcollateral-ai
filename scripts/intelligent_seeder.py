@@ -70,9 +70,7 @@ if model is None:
 else:
     AI_AVAILABLE = True
 
-# ==========================================
-# AI PROMPT (Hanya untuk Real AI)
-# ==========================================
+# AI prompt for Gemini model
 GROUP_ANALYSIS_PROMPT = """
 Role: Senior Risk Analyst Microfinance Indonesia.
 Data Kelompok:
@@ -92,9 +90,7 @@ Output JSON (Strict JSON, no markdown):
 }}
 """
 
-# ==========================================
-# SMART GENERATORS (Menjamin Struktur Lengkap)
-# ==========================================
+# Data generator functions
 
 
 def generate_group_name(index):
