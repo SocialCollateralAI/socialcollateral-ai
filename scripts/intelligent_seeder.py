@@ -628,9 +628,7 @@ def build_neighbor_relationships(processed_groups, target_neighbors=5):
             })
 
 
-# ==========================================
-# 🚀 PARALLEL WORKER FUNCTION
-# ==========================================
+# PARALLEL WORKER FUNCTION
 def process_single_group(args):
     """Process a single group using modular helper functions"""
     (
@@ -686,9 +684,7 @@ def process_single_group(args):
 
 
 
-# ==========================================
 # MAIN PARALLEL PROCESSOR
-# ==========================================
 def process_data():
     global AI_AVAILABLE
     print(f"🚀 MEMULAI PARALLEL SEEDING ({MAX_NODES} Nodes, {MAX_WORKERS} Workers with Rate Limiting)...")
