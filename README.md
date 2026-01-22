@@ -1,4 +1,4 @@
-# SocialCollateral AI - Backend Service (Competition Version)
+# SocialCollateral AI - Backend & AI Service (Competition Version)
 
 > **Branch**: `mvp-hackathon`  
 > This is the competition demo version from the Amartha x GDG Jakarta 2025 Hackathon. For baseline architecture, see [`main`](https://github.com/SocialCollateralAI/socialcollateral-ai/tree/main) branch. For GCP setup reference, see [`pre-hackathon`](https://github.com/SocialCollateralAI/socialcollateral-ai/tree/pre-hackathon) branch.
