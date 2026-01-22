@@ -245,345 +245,212 @@ def optimize_image_memory(image_path, max_size=800, quality=85):
         return None
 
 
-# ==========================================
-# 🚀 PARALLEL WORKER FUNCTION
-# ==========================================
-def process_single_group(args):
-    """WORKER: Process a single group in parallel"""
-    (
-        group_counter, batch_ids, cust_map, cust_loans, loan_loc,
-        home_images, bisnis_images, AI_AVAILABLE
-    ) = args
+def calculate_csv_metrics(batch_ids, cust_map, cust_loans, loan_loc):
+    """Calculate group metrics from CSV data"""
+    total_dpd = 0
+    total_loan = 0
+    businesses = []
+    loc_candidates = []
     
-    group_id = f"G{str(group_counter + 1).zfill(3)}"
-    
-    try:
-        # --- A. Hitung Data CSV (Real) ---
-        total_dpd = 0
-        total_loan = 0
-        businesses = []
-        loc_candidates = []
-
-        for cid in batch_ids:
-            my_loans = cust_loans.get(cid, [])
-            for l in my_loans:
-                try:
-                    total_dpd += int(float(l.get("dpd", 0)))
-                except:
-                    pass
-                try:
-                    total_loan += float(l.get("outstanding_amount", 0))
-                except:
-                    pass
-
-                lid = l.get("loan_id")
-                if lid in loan_loc:
-                    loc_candidates.append(loan_loc[lid])
-
-            if cid in cust_map:
-                businesses.append(cust_map[cid].get("purpose", "Usaha Mikro"))
-
-        avg_dpd = total_dpd / len(batch_ids) if batch_ids else 0
-        common_biz = (
-            max(set(businesses), key=businesses.count)
-            if businesses
-            else "Pedagang Umum"
-        )
-
-        # Logic Warna Node
-        if avg_dpd > 30:
-            risk_status = "TOXIC"
-            node_color = "toxic"
-        elif avg_dpd > 0:
-            risk_status = "MEDIUM"
-            node_color = "medium"
-        else:
-            risk_status = "HEALTHY"
-            node_color = "healthy"
-
-        # Logic Lokasi
-        lat, lng = -6.59, 106.8
-        if loc_candidates:
+    for cid in batch_ids:
+        my_loans = cust_loans.get(cid, [])
+        for l in my_loans:
             try:
-                lat = float(loc_candidates[0]["lat"])
-                lng = float(loc_candidates[0]["lng"])
+                total_dpd += int(float(l.get("dpd", 0)))
             except:
                 pass
-        else:
-            lat += (random.random() - 0.5) * 0.05
-            lng += (random.random() - 0.5) * 0.05
-
-        # Image selection
-        home_img_path = home_images[group_counter % len(home_images)]
-        bisnis_img_path = bisnis_images[group_counter % len(bisnis_images)]
-        
-        # Generate URLs with Cloud Run base URL - Simple endpoint
-        CLOUD_RUN_URL = "https://socialcollateral-api-228221306168.asia-southeast2.run.app"
-        
-        if "placeholder" not in home_img_path and os.path.exists(home_img_path):
-            home_img_url = f"{CLOUD_RUN_URL}/images/{os.path.basename(home_img_path)}"
-        else:
-            home_img_url = f"{CLOUD_RUN_URL}/images/placeholder_home.jpg"
+            try:
+                total_loan += float(l.get("outstanding_amount", 0))
+            except:
+                pass
             
-        if "placeholder" not in bisnis_img_path and os.path.exists(bisnis_img_path):
-            bisnis_img_url = f"{CLOUD_RUN_URL}/images/{os.path.basename(bisnis_img_path)}"
-        else:
-            bisnis_img_url = f"{CLOUD_RUN_URL}/images/placeholder_bisnis.jpg"
+            lid = l.get("loan_id")
+            if lid in loan_loc:
+                loc_candidates.append(loan_loc[lid])
+        
+        if cid in cust_map:
+            businesses.append(cust_map[cid].get("purpose", "Usaha Mikro"))
+    
+    avg_dpd = total_dpd / len(batch_ids) if batch_ids else 0
+    common_biz = (
+        max(set(businesses), key=businesses.count)
+        if businesses
+        else "Pedagang Umum"
+    )
+    
+    # Determine initial risk status from DPD
+    if avg_dpd > 30:
+        risk_status = "TOXIC"
+    elif avg_dpd > 0:
+        risk_status = "MEDIUM"
+    else:
+        risk_status = "HEALTHY"
+    
+    # Location logic
+    lat, lng = -6.59, 106.8
+    if loc_candidates:
+        try:
+            lat = float(loc_candidates[0]["lat"])
+            lng = float(loc_candidates[0]["lng"])
+        except:
+            pass
+    else:
+        lat += (random.random() - 0.5) * 0.05
+        lng += (random.random() - 0.5) * 0.05
+    
+    return {
+        "avg_dpd": avg_dpd,
+        "total_loan": total_loan,
+        "common_biz": common_biz,
+        "risk_status": risk_status,
+        "lat": lat,
+        "lng": lng
+    }
 
-        # --- B. AI INTELLIGENCE WITH RETRY LOGIC ---
-        ai_data = {}
 
-        # Cek apakah pakai AI atau Mockup
-        if (
-            group_counter < AI_LIMIT
-            and GOOGLE_API_KEY != "MASUKKAN_API_KEY_ANDA_DISINI"
-            and AI_AVAILABLE
-        ):
-            # 🔴 REAL AI PATH with exponential backoff retry
-            prompt = GROUP_ANALYSIS_PROMPT.format(
-                group_text=f"ID: {group_id}, DPD: {avg_dpd}, Biz: {common_biz}, Loan: {total_loan}"
-            )
-            vertex_inputs = [prompt]
+def generate_image_urls(group_counter, home_images, bisnis_images):
+    """Generate image URLs for home and business images"""
+    home_img_path = home_images[group_counter % len(home_images)]
+    bisnis_img_path = bisnis_images[group_counter % len(bisnis_images)]
+    
+    CLOUD_RUN_URL = "https://socialcollateral-api-228221306168.asia-southeast2.run.app"
+    
+    if "placeholder" not in home_img_path and os.path.exists(home_img_path):
+        home_img_url = f"{CLOUD_RUN_URL}/images/{os.path.basename(home_img_path)}"
+    else:
+        home_img_url = f"{CLOUD_RUN_URL}/images/placeholder_home.jpg"
+        
+    if "placeholder" not in bisnis_img_path and os.path.exists(bisnis_img_path):
+        bisnis_img_url = f"{CLOUD_RUN_URL}/images/{os.path.basename(bisnis_img_path)}"
+    else:
+        bisnis_img_url = f"{CLOUD_RUN_URL}/images/placeholder_bisnis.jpg"
+    
+    return home_img_url, bisnis_img_url, home_img_path
 
-            # ➕ Add optimized image
-            optimized_image = optimize_image_memory(home_img_path)
-            if optimized_image:
-                vertex_inputs.append(optimized_image)
 
-            # 🔄 RETRY LOGIC WITH EXPONENTIAL BACKOFF
-            max_retries = 3
-            base_delay = 2  # Start with 2 seconds
-            
-            for attempt in range(max_retries):
-                try:
-                    # 🔥 GENERATE WITH VERTEX
-                    resp = model.generate_content(
-                        vertex_inputs,
-                        generation_config={
-                            "max_output_tokens": 2048,
-                            "temperature": 0.3,
-                            "response_mime_type": "application/json"
-                        }
-                    )
-                    ai_data = json.loads(resp.text)
-                    # Success! Break out of retry loop
+def calculate_node_size(trust_score, risk_status):
+    """
+    Calculate visual node size based on trust score and risk status.
+    HEALTHY: 25-50px (higher trust = bigger)
+    MEDIUM: 18-28px (moderate)
+    TOXIC: 20-45px (lower trust = bigger for urgency)
+    """
+    if risk_status == "HEALTHY":
+        size = 25 + int((trust_score - 70) * 0.83)
+        return max(25, min(50, size))
+    elif risk_status == "MEDIUM":
+        size = 18 + int((trust_score - 40) * 0.25)
+        return max(18, min(28, size))
+    else:  # TOXIC
+        inverted_urgency = (60 - trust_score) if trust_score <= 60 else 0
+        size = 20 + int(inverted_urgency * 0.5)
+        return max(20, min(45, size))
+
+
+def reconcile_risk_status(trust_score, initial_risk_status, group_id):
+    """
+    Reconcile risk status based on trust score.
+    Priority: trust_score defines final risk classification
+    """
+    if trust_score >= 80:
+        final_risk_status = "HEALTHY"
+        final_node_color = "healthy"
+    elif trust_score > 25:
+        final_risk_status = "MEDIUM"
+        final_node_color = "medium"
+    else:
+        final_risk_status = "TOXIC"
+        final_node_color = "toxic"
+    
+    if final_risk_status != initial_risk_status:
+        print(f"      ℹ️ Reconciling risk for {group_id}: {initial_risk_status} → {final_risk_status}")
+    
+    return final_risk_status, final_node_color
+
+
+def get_ai_inference_with_retry(group_id, group_counter, avg_dpd, common_biz, total_loan, home_img_path):
+    """Attempt AI inference with exponential backoff retry"""
+    ai_data = {}
+    
+    if (
+        group_counter < AI_LIMIT
+        and GOOGLE_API_KEY != "MASUKKAN_API_KEY_ANDA_DISINI"
+        and AI_AVAILABLE
+    ):
+        prompt = GROUP_ANALYSIS_PROMPT.format(
+            group_text=f"ID: {group_id}, DPD: {avg_dpd}, Biz: {common_biz}, Loan: {total_loan}"
+        )
+        vertex_inputs = [prompt]
+        
+        optimized_image = optimize_image_memory(home_img_path)
+        if optimized_image:
+            vertex_inputs.append(optimized_image)
+        
+        max_retries, base_delay = 3, 2
+        
+        for attempt in range(max_retries):
+            try:
+                resp = model.generate_content(
+                    vertex_inputs,
+                    generation_config={
+                        "max_output_tokens": 2048,
+                        "temperature": 0.3,
+                        "response_mime_type": "application/json"
+                    }
+                )
+                ai_data = json.loads(resp.text)
+                break
+            except Exception as e:
+                error_str = str(e).lower()
+                is_quota_error = any(x in error_str for x in ["429", "resource exhausted", "quota", "rate limit"])
+                
+                if is_quota_error and attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    print(f"      ⏳ {group_id} Rate limited (attempt {attempt + 1}/{max_retries}), retrying in {delay}s...")
+                    time.sleep(delay)
+                elif attempt == max_retries - 1:
+                    print(f"      ⚠️ {group_id} AI failed after {max_retries} attempts: {e}")
+                else:
+                    print(f"      ⚠️ {group_id} AI Error (non-quota): {e}")
                     break
-                    
-                except Exception as e:
-                    error_str = str(e).lower()
-                    is_quota_error = (
-                        "429" in error_str or 
-                        "resource exhausted" in error_str or 
-                        "quota" in error_str or
-                        "rate limit" in error_str
-                    )
-                    
-                    if is_quota_error and attempt < max_retries - 1:
-                        # Exponential backoff: 2s, 4s, 8s
-                        delay = base_delay * (2 ** attempt)
-                        print(f"      ⏳ {group_id} Rate limited (attempt {attempt + 1}/{max_retries}), retrying in {delay}s...")
-                        time.sleep(delay)
-                    elif attempt == max_retries - 1:
-                        print(f"      ⚠️ {group_id} AI failed after {max_retries} attempts: {e}")
-                        # Final attempt failed, will use fallback
-                    else:
-                        # Non-quota error, fail immediately
-                        print(f"      ⚠️ {group_id} AI Error (non-quota): {e}")
-                        break
+    
+    return ai_data
 
-        # Smart Mockup fallback - WITH VARIED TRUST SCORES
-        if not ai_data:
-            # Generate varied trust scores for better size differentiation
-            if risk_status == "HEALTHY":
-                # HEALTHY: Trust score 70-95 (varied)
-                base_trust = random.randint(70, 95)
-            elif risk_status == "MEDIUM":
-                # MEDIUM: Trust score 40-75 (varied)
-                base_trust = random.randint(40, 75)
-            else:  # TOXIC
-                # TOXIC: Trust score 10-55 (varied, lower = bigger size)
-                base_trust = random.randint(10, 55)
-            
-            rec_text = ""
-            if base_trust >= 80:
-                rec_text = f"🟢 LAYAK MODAL: Kelompok {common_biz} dapat diberikan modal standar. (Mock)"
-            elif base_trust >= 50:
-                rec_text = f"🟡 REVIEW DETAIL: Kelompok {common_biz} perlu evaluasi mendalam. (Mock)"
-            else:
-                rec_text = f"🔴 TIDAK LAYAK: Kelompok {common_biz} tidak direkomendasikan untuk modal. (Mock)"
-                
-            ai_data = {
-                "risk_badge": f"{risk_status} RISK",
-                "trust_score": base_trust,
-                "sentiment_text": f"Kelompok didominasi usaha {common_biz}, performa pembayaran {risk_status.lower()}.",
-                "asset_condition": "AVERAGE",
-                "asset_tags": ["Usaha Mikro", "Bangunan Permanen"],
-                "repayment_prediction": base_trust,  # Use trust_score for consistency
-                "recommendation_text": rec_text,
-            }
 
-        # --- C. CONSTRUCT JSON (FULL SCHEMA) ---
-        trust_score = ai_data.get("trust_score", 70)
+def build_mock_data(risk_status, common_biz):
+    """Build mock AI data when real AI is unavailable"""
+    if risk_status == "HEALTHY":
+        base_trust = random.randint(70, 95)
+    elif risk_status == "MEDIUM":
+        base_trust = random.randint(40, 75)
+    else:
+        base_trust = random.randint(10, 55)
+    
+    if base_trust >= 80:
+        rec_text = f"🟢 LAYAK MODAL: Kelompok {common_biz} dapat diberikan modal standar. (Mock)"
+    elif base_trust >= 50:
+        rec_text = f"🟡 REVIEW DETAIL: Kelompok {common_biz} perlu evaluasi mendalam. (Mock)"
+    else:
+        rec_text = f"🔴 TIDAK LAYAK: Kelompok {common_biz} tidak direkomendasikan untuk modal. (Mock)"
+    
+    return {
+        "risk_badge": f"{risk_status} RISK",
+        "trust_score": base_trust,
+        "sentiment_text": f"Kelompok didominasi usaha {common_biz}, performa pembayaran {risk_status.lower()}.",
+        "asset_condition": "AVERAGE",
+        "asset_tags": ["Usaha Mikro", "Bangunan Permanen"],
+        "repayment_prediction": base_trust,
+        "recommendation_text": rec_text,
+    }
 
-        # Reconcile final risk status using trust_score to ensure consistency
-        # Priority: trust_score defines the semantic risk type presented to FE
-        # New thresholds requested:
-        #   HEALTH: trust_score >= 80
-        #   MEDIUM: 26 <= trust_score < 80
-        #   LOW: trust_score <= 25  (mapped to internal 'TOXIC')
-        final_risk_status = None
-        final_node_color = None
-        if trust_score >= 80:
-            final_risk_status = "HEALTHY"
-            final_node_color = "healthy"
-        elif trust_score > 25:
-            # 26..79 -> MEDIUM
-            final_risk_status = "MEDIUM"
-            final_node_color = "medium"
-        else:
-            # 0..25 -> LOW (keep internal toxic semantics)
-            final_risk_status = "TOXIC"
-            final_node_color = "toxic"
 
-        # If initial risk_status (from avg_dpd) differs from final, log for debugging
-        if final_risk_status != risk_status:
-            print(f"      ℹ️ Reconciling risk for {group_id}: avg_dpd-based={risk_status} -> trust_score-based={final_risk_status}")
-
-        # Use reconciled values going forward
-        risk_status = final_risk_status
-        node_color = final_node_color
-
-        # 🎯 VISUAL SIZE LOGIC - IMPROVED FOR CLEAR DIFFERENTIATION
-        def calculate_node_size(trust_score, risk_status):
-            """
-            HEALTHY: Trust Score 70-100 → Size 25-50px (Makin tinggi trust, makin besar)
-            MEDIUM: Trust Score 40-80 → Size 18-28px (Moderat)  
-            TOXIC: Trust Score 10-60 → Size 20-45px (Makin rendah trust, makin besar untuk urgent attention!)
-            """
-            
-            if risk_status == "HEALTHY":
-                # HEALTHY: 25-50px based on trust score
-                # Trust 70 → 25px, Trust 100 → 50px
-                size = 25 + int((trust_score - 70) * 0.83)  # (50-25)/(100-70) = 0.83
-                return max(25, min(50, size))
-                
-            elif risk_status == "MEDIUM":
-                # MEDIUM: 18-28px based on trust score
-                # Trust 40 → 18px, Trust 80 → 28px
-                size = 18 + int((trust_score - 40) * 0.25)  # (28-18)/(80-40) = 0.25
-                return max(18, min(28, size))
-                
-            else:  # TOXIC
-                # TOXIC: 20-45px (INVERTED - makin rendah trust, makin besar!)
-                # Trust 60 → 20px, Trust 10 → 45px
-                inverted_urgency = (60 - trust_score) if trust_score <= 60 else 0
-                size = 20 + int(inverted_urgency * 0.5)  # (45-20)/50 = 0.5
-                return max(20, min(45, size))
-
-        node_size = calculate_node_size(trust_score, risk_status)
-        
-        # DEBUG: Print size calculation for verification
-        print(f"      📊 {group_id}: {risk_status} | Trust: {trust_score} → Size: {node_size}px")
-
-        # Generate random location
-        location = generate_random_location()
-
-        # Construct the group data
-        group_data = {
-            "id": group_id,
-            "type": node_color,
-            "size": node_size,
-            "x": random.randint(0, 1000),
-            "y": random.randint(0, 1000),
-            "lat": lat,
-            "lng": lng,
-            "header": {
-                "name": generate_group_name(group_counter + 1),
-                "location_city": location["city"],
-                "location_village": location["village"],
-                "member_count": len(batch_ids),
-                "risk_badge": ai_data.get("risk_badge", f"{risk_status} RISK"),
-                "trust_score": trust_score,
-                "loan_eligibility": "Eligible" if trust_score > 70 else "Review",
-                "total_loan_amount": int(total_loan),
-                "visual_priority": "HIGH" if (risk_status == "HEALTHY" and node_size >= 35) or (risk_status == "TOXIC" and node_size >= 30) else "MEDIUM" if node_size >= 20 else "LOW",
-            },
-            "overview": {
-                "primary_driver": {
-                    "text": ai_data.get("sentiment_text"),
-                    "payment_score": ai_data.get("repayment_prediction"),
-                    "social_score": trust_score,
-                },
-                "metrics": {
-                    "cycle": random.randint(1, 10),
-                    "repayment_rate": ai_data.get("repayment_prediction"),
-                    "avg_delay": f"H+{int(avg_dpd)}",
-                },
-                "neighbors": [],  # Will be populated later
-            },
-            "trends": {
-                "repayment_history": generate_trend_data(trust_score, is_asset=False),
-                "asset_growth": generate_trend_data(trust_score, is_asset=True),
-                "stats": {
-                    "streak": random.randint(1, 12),
-                    "last_default": "Never" if avg_dpd == 0 else "Active",
-                    "trend_val": 2.5,
-                    "trend_dir": "up" if trust_score > 70 else "down",
-                    "avg_rate": 98.0,
-                    "best_rate": 100.0,
-                },
-                "seasonality_heatmap": [1, 1, 1, 2, 2, 3, 1, 1, 1, 1, 1, 1],
-            },
-            "insights": {
-                "social_graph": {
-                    "risk_members": generate_risk_members(len(batch_ids), node_color)
-                },
-                "cv": {
-                    "home": {
-                        "condition": ai_data.get("asset_condition"),
-                        "material": "Verified",
-                        "roof": "Tile",
-                        "access": "Paved",
-                        "occupancy": "Occupied",
-                        "assets": ai_data.get("asset_tags"),
-                        "img_url": home_img_url,
-                    },
-                    "biz": {
-                        "stability": "Permanent",
-                        "type": common_biz,
-                        "traffic": "Medium",
-                        "status": "Active",
-                        "digital": "QRIS",
-                        "inventory": ["Full"],
-                        "img_url": bisnis_img_url,
-                    },
-                },
-                "prediction": {
-                    "default_risk_prob": 100 - trust_score,
-                    "horizon_days": 30,
-                    "what_if": {
-                        "current_score": trust_score,
-                        "projected_score": min(100, trust_score + 5),
-                        "improvement_pct": 5,
-                        "scenario": "Intervention",
-                    },
-                },
-                # "recommendation_text": generate_modal_recommendation(trust_score, risk_status, common_biz, node_size),
-                "recommendation_text": ai_data.get("recommendation_text", "Rekomendasi dari AI tidak tersedia."),
-            },
-            "decision": {
-                "last_audit": f"Agent {random.choice(['Budi', 'Sari'])}",
-                "is_locked": True if risk_status == "TOXIC" else False,
-                "audit_date": datetime.now().strftime("%Y-%m-%d"),
-            },
-        }
-        
-        print(f"✅ {group_id} Processed | Trust: {trust_score}")
-        return group_data
-        
-    except Exception as e:
-        print(f"❌ Error processing {group_id}: {e}")
-        # Return a fallback group to prevent total failure
+def build_group_data(group_id, group_counter, metrics, ai_data, home_img_url, bisnis_img_url, 
+                     risk_status, node_color, node_size, batch_ids, is_error=False):
+    """
+    Build complete group data structure. 
+    If is_error=True, returns fallback data with defaults.
+    """
+    if is_error:
         return {
             "id": group_id,
             "type": "medium",
@@ -608,6 +475,215 @@ def process_single_group(args):
             "insights": {"social_graph": {"risk_members": []}, "cv": {"home": {"condition": "UNKNOWN", "material": "Unknown", "roof": "Unknown", "access": "Unknown", "occupancy": "Unknown", "assets": [], "img_url": "placeholder_home.jpg"}, "biz": {"stability": "Unknown", "type": "Unknown", "traffic": "Unknown", "status": "Unknown", "digital": "Unknown", "inventory": [], "img_url": "placeholder_bisnis.jpg"}}, "prediction": {"default_risk_prob": 50, "horizon_days": 30, "what_if": {"current_score": 50, "projected_score": 50, "improvement_pct": 0, "scenario": "Error"}}, "recommendation_text": "Error during processing - manual review required"},
             "decision": {"last_audit": "System", "is_locked": True, "audit_date": datetime.now().strftime("%Y-%m-%d")}
         }
+    
+    trust_score = ai_data.get("trust_score", 70)
+    location = generate_random_location()
+    
+    return {
+        "id": group_id,
+        "type": node_color,
+        "size": node_size,
+        "x": random.randint(0, 1000),
+        "y": random.randint(0, 1000),
+        "lat": metrics["lat"],
+        "lng": metrics["lng"],
+        "header": {
+            "name": generate_group_name(group_counter + 1),
+            "location_city": location["city"],
+            "location_village": location["village"],
+            "member_count": len(batch_ids),
+            "risk_badge": ai_data.get("risk_badge", f"{risk_status} RISK"),
+            "trust_score": trust_score,
+            "loan_eligibility": "Eligible" if trust_score > 70 else "Review",
+            "total_loan_amount": int(metrics["total_loan"]),
+            "visual_priority": "HIGH" if (risk_status == "HEALTHY" and node_size >= 35) or (risk_status == "TOXIC" and node_size >= 30) else "MEDIUM" if node_size >= 20 else "LOW",
+        },
+        "overview": {
+            "primary_driver": {
+                "text": ai_data.get("sentiment_text"),
+                "payment_score": ai_data.get("repayment_prediction"),
+                "social_score": trust_score,
+            },
+            "metrics": {
+                "cycle": random.randint(1, 10),
+                "repayment_rate": ai_data.get("repayment_prediction"),
+                "avg_delay": f"H+{int(metrics['avg_dpd'])}",
+            },
+            "neighbors": [],
+        },
+        "trends": {
+            "repayment_history": generate_trend_data(trust_score, is_asset=False),
+            "asset_growth": generate_trend_data(trust_score, is_asset=True),
+            "stats": {
+                "streak": random.randint(1, 12),
+                "last_default": "Never" if metrics["avg_dpd"] == 0 else "Active",
+                "trend_val": 2.5,
+                "trend_dir": "up" if trust_score > 70 else "down",
+                "avg_rate": 98.0,
+                "best_rate": 100.0,
+            },
+            "seasonality_heatmap": [1, 1, 1, 2, 2, 3, 1, 1, 1, 1, 1, 1],
+        },
+        "insights": {
+            "social_graph": {
+                "risk_members": generate_risk_members(len(batch_ids), node_color)
+            },
+            "cv": {
+                "home": {
+                    "condition": ai_data.get("asset_condition"),
+                    "material": "Verified",
+                    "roof": "Tile",
+                    "access": "Paved",
+                    "occupancy": "Occupied",
+                    "assets": ai_data.get("asset_tags"),
+                    "img_url": home_img_url,
+                },
+                "biz": {
+                    "stability": "Permanent",
+                    "type": metrics["common_biz"],
+                    "traffic": "Medium",
+                    "status": "Active",
+                    "digital": "QRIS",
+                    "inventory": ["Full"],
+                    "img_url": bisnis_img_url,
+                },
+            },
+            "prediction": {
+                "default_risk_prob": 100 - trust_score,
+                "horizon_days": 30,
+                "what_if": {
+                    "current_score": trust_score,
+                    "projected_score": min(100, trust_score + 5),
+                    "improvement_pct": 5,
+                    "scenario": "Intervention",
+                },
+            },
+            "recommendation_text": ai_data.get("recommendation_text", "Rekomendasi dari AI tidak tersedia."),
+        },
+        "decision": {
+            "last_audit": f"Agent {random.choice(['Budi', 'Sari'])}",
+            "is_locked": True if risk_status == "TOXIC" else False,
+            "audit_date": datetime.now().strftime("%Y-%m-%d"),
+        },
+    }
+
+
+def build_neighbor_relationships(processed_groups, target_neighbors=5):
+    """Build neighbor relationships for all groups based on geographic proximity"""
+    gids = list(processed_groups.keys())
+    city_map = {}
+    village_map = {}
+    
+    for _gid, _data in processed_groups.items():
+        city = _data.get("header", {}).get("location_city")
+        village = _data.get("header", {}).get("location_village")
+        city_map.setdefault(city, []).append(_gid)
+        village_map.setdefault((city, village), []).append(_gid)
+    
+    for gid in processed_groups.keys():
+        my_city = processed_groups[gid].get("header", {}).get("location_city")
+        my_village = processed_groups[gid].get("header", {}).get("location_village")
+        
+        same_village_candidates = [x for x in village_map.get((my_city, my_village), []) if x != gid]
+        
+        neighbors = []
+        if len(same_village_candidates) >= target_neighbors:
+            neighbors = random.sample(same_village_candidates, k=target_neighbors)
+        else:
+            neighbors = same_village_candidates.copy()
+            same_city_candidates = [x for x in city_map.get(my_city, []) if x != gid and x not in neighbors]
+            need = 3 - len(neighbors)
+            if same_city_candidates and need > 0:
+                neighbors += random.sample(same_city_candidates, k=min(need, len(same_city_candidates)))
+            
+            need = target_neighbors - len(neighbors)
+            if need > 0:
+                others = [x for x in gids if x != gid and x not in neighbors]
+                if others:
+                    neighbors += random.sample(others, k=min(need, len(others)))
+        
+        processed_groups[gid]["overview"]["neighbors"] = []
+        for nid in neighbors:
+            n_data = processed_groups[nid]
+            dist = random.randint(20, 500)
+            
+            if n_data.get("type") == "toxic":
+                rel = "Risk Contagion"
+            elif n_data.get("header", {}).get("location_village") == my_village:
+                rel = "Same Village"
+            elif n_data.get("header", {}).get("location_city") == my_city:
+                rel = "Same City"
+            else:
+                rel = "Shared Agent"
+            
+            if dist < 100 and rel != "Risk Contagion":
+                rel = "Geo-Cluster"
+            
+            processed_groups[gid]["overview"]["neighbors"].append({
+                "id": nid,
+                "name": n_data["header"]["name"],
+                "risk": n_data["type"],
+                "distance": f"{dist}m",
+                "relation": rel,
+            })
+
+
+# ==========================================
+# 🚀 PARALLEL WORKER FUNCTION
+# ==========================================
+def process_single_group(args):
+    """Process a single group using modular helper functions"""
+    (
+        group_counter, batch_ids, cust_map, cust_loans, loan_loc,
+        home_images, bisnis_images, AI_AVAILABLE
+    ) = args
+    
+    group_id = f"G{str(group_counter + 1).zfill(3)}"
+    
+    try:
+        # Calculate metrics from CSV data
+        metrics = calculate_csv_metrics(batch_ids, cust_map, cust_loans, loan_loc)
+        
+        # Generate image URLs
+        home_img_url, bisnis_img_url, home_img_path = generate_image_urls(
+            group_counter, home_images, bisnis_images
+        )
+        
+        # Get AI inference or build mock data
+        ai_data = get_ai_inference_with_retry(
+            group_id, group_counter, metrics["avg_dpd"], 
+            metrics["common_biz"], metrics["total_loan"], home_img_path
+        )
+        
+        if not ai_data:
+            ai_data = build_mock_data(metrics["risk_status"], metrics["common_biz"])
+        
+        # Reconcile risk status based on trust score
+        trust_score = ai_data.get("trust_score", 70)
+        risk_status, node_color = reconcile_risk_status(
+            trust_score, metrics["risk_status"], group_id
+        )
+        
+        # Calculate node size
+        node_size = calculate_node_size(trust_score, risk_status)
+        print(f"      📊 {group_id}: {risk_status} | Trust: {trust_score} → Size: {node_size}px")
+        
+        # Build group data structure
+        group_data = build_group_data(
+            group_id, group_counter, metrics, ai_data, 
+            home_img_url, bisnis_img_url, risk_status, node_color, 
+            node_size, batch_ids, is_error=False
+        )
+        
+        print(f"✅ {group_id} Processed | Trust: {trust_score}")
+        return group_data
+        
+    except Exception as e:
+        print(f"❌ Error processing {group_id}: {e}")
+        return build_group_data(
+            group_id, group_counter, {}, {}, "", "", "", "", 0, batch_ids, is_error=True
+        )
+
 
 
 # ==========================================
@@ -722,77 +798,9 @@ def process_data():
 
     print(f"   ✅ Parallel processing complete! {len(processed_groups)} groups processed.")
 
-    # 6. NEIGHBORS WIRING
-    # Build mappings for city and village so we can prioritize neighbors correctly.
-    gids = list(processed_groups.keys())
-    city_map = {}
-    village_map = {}
-    for _gid, _data in processed_groups.items():
-        city = _data.get("header", {}).get("location_city")
-        village = _data.get("header", {}).get("location_village")
-        city_map.setdefault(city, []).append(_gid)
-        village_map.setdefault((city, village), []).append(_gid)
 
-    TARGET_NEIGHBORS = 5
-
-    for gid in list(processed_groups.keys()):
-        my_city = processed_groups[gid].get("header", {}).get("location_city")
-        my_village = processed_groups[gid].get("header", {}).get("location_village")
-
-        # 1) Prefer neighbors from same city and same village (city must match)
-        same_village_candidates = [x for x in village_map.get((my_city, my_village), []) if x != gid]
-
-        neighbors = []
-
-        if len(same_village_candidates) >= TARGET_NEIGHBORS:
-            neighbors = random.sample(same_village_candidates, k=TARGET_NEIGHBORS)
-        else:
-            # Start with same-village candidates
-            neighbors = same_village_candidates.copy()
-
-            # 2) Fill from same city (other villages) if still need
-            same_city_candidates = [x for x in city_map.get(my_city, []) if x != gid and x not in neighbors]
-            need = 3 - len(neighbors)
-            if same_city_candidates and need > 0:
-                take = min(need, len(same_city_candidates))
-                neighbors += random.sample(same_city_candidates, k=take)
-
-            # 3) If still need, fill with other groups from other cities
-            need = TARGET_NEIGHBORS - len(neighbors)
-            if need > 0:
-                others = [x for x in gids if x != gid and x not in neighbors]
-                if others:
-                    neighbors += random.sample(others, k=min(need, len(others)))
-
-        # Build neighbor entries with relation labels
-        processed_groups[gid]["overview"]["neighbors"] = []
-        for nid in neighbors:
-            n_data = processed_groups[nid]
-            # synthetic distance; can be replaced with haversine if lat/lng used
-            dist = random.randint(20, 500)
-
-            # relation priority: Risk Contagion (if toxic), Same Village, Same City, Geo-Cluster (if close), Shared Agent
-            if n_data.get("type") == "toxic":
-                rel = "Risk Contagion"
-            elif n_data.get("header", {}).get("location_city") == my_city and n_data.get("header", {}).get("location_village") == my_village:
-                rel = "Same Village"
-            elif n_data.get("header", {}).get("location_city") == my_city:
-                rel = "Same City"
-            else:
-                rel = "Shared Agent"
-
-            if dist < 100 and rel != "Risk Contagion":
-                rel = "Geo-Cluster"
-
-            processed_groups[gid]["overview"]["neighbors"].append(
-                {
-                    "id": nid,
-                    "name": n_data["header"]["name"],
-                    "risk": n_data["type"],
-                    "distance": f"{dist}m",
-                    "relation": rel,
-                }
-            )
+    # Build neighbor relationships
+    build_neighbor_relationships(processed_groups)
 
     # 5. SAVE FINAL JSON
     final_db = {
