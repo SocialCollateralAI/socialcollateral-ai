@@ -8,10 +8,45 @@ This repository maintains three distinct branches representing different stages 
 
 ### Branch Overview
 
-|                 | **`main`**                                                                                                                                                                                                                    | **`pre-hackathon`**                                                                                                                                                                                     | **`mvp-hackathon`**                                                                                                                                                                                                                                                      |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Description** | Baseline Architecture                                                                                                                                                                                                         | GCP Integration Prep                                                                                                                                                                             | Competition Demo Version                                                                                                                                                                                                                                                 |
-| **Scope**       | • Initial schema and intelligent seeder implementation<br><br>• Matches technical specification from original proposal<br><br>• Uses Unsplash API for placeholder images<br><br>• Clean foundation for POC (Proof of Concept) | • Pre-competition preparation branch (night before demo day)<br><br>• Includes GCP service configuration<br><br>• Setup for Vertex AI/Gemini integration<br><br>• Pre-computed data processing pipeline | • Production demo used during live competition<br><br>• Integrated with actual Amartha data (CSV + images)<br><br>• Full GCP implementation (Vertex AI, Cloud Vision, pre-computed inference<br><br>• Minor schema additions to accommodate real-world data requirements |
+<table>
+<thead>
+  <tr>
+    <th></th>
+    <th><code>main</code></th>
+    <th><code>pre-hackathon</code></th>
+    <th><code>mvp-hackathon</code></th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td><strong>Description</strong></td>
+    <td valign="top">Baseline Architecture</td>
+    <td valign="top">GCP Integration Prep</td>
+    <td valign="top">Competition Demo Version</td>
+  </tr>
+  <tr>
+    <td><strong>Scope</strong></td>
+    <td valign="top">
+      • Initial schema and intelligent seeder implementation<br><br>
+      • Matches technical specification from original proposal<br><br>
+      • Uses Unsplash API for placeholder images<br><br>
+      • Clean foundation for POC (Proof of Concept)
+    </td>
+    <td valign="top">
+      • Pre-competition preparation branch (night before demo day)<br><br>
+      • Includes GCP service configuration<br><br>
+      • Setup for Vertex AI/Gemini integration<br><br>
+      • Pre-computed data processing pipeline
+    </td>
+    <td valign="top">
+      • Production demo used during live competition<br><br>
+      • Integrated with actual Amartha data (CSV + images)<br><br>
+      • Full GCP implementation (Vertex AI, Cloud Vision, pre-computed inference<br><br>
+      • Minor schema additions to accommodate real-world data requirements
+    </td>
+  </tr>
+</tbody>
+</table>
 
 > **Development Context**: This branch represents a functional MVP developed under hackathon time constraints (24 hours), optimized for demonstration rather than production deployment.
 
