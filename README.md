@@ -61,7 +61,7 @@ This repository maintains three distinct branches representing different stages 
 
 ## API Endpoints
 
-**Production URL**: `https://api.socialcollateral.id/api/v1`  
+**Production URL**: `https://api.social-collateral.id/api/v1`  
 **Local URL**: `http://localhost:8000/api/v1`
 
 | Method | Endpoint       | Description                                                               |
@@ -69,7 +69,7 @@ This repository maintains three distinct branches representing different stages 
 | `GET`  | `/graph`       | Returns complete node/edge graph data for Sigma.js visualization          |
 | `GET`  | `/groups/{id}` | Returns detailed group analysis (Graph metrics, NLP sentiment, CV assets) |
 
-**Interactive Documentation**: `https://api.socialcollateral.id/docs` (FastAPI auto-generated Swagger UI)
+**Interactive Documentation**: `api.social-collateral.id/docs` (FastAPI auto-generated Swagger UI)
 
 <!--
 ## Technology Stack
