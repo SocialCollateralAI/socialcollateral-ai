@@ -28,8 +28,10 @@ async def get_graph_topology():
                     "y": g.get("y", 0),
                     "size": g["header"]["member_count"],
                     "color": color,
-                    "risk_badge": g["header"]["risk_badge"],  # filter FE
-                    "cluster": g["header"]["location_village"],  # filter lokasi
+                    "risk_badge": g["header"]["risk_badge"],
+                    "location_city": g["header"]["location_city"],
+                    "location_village": g["header"]["location_village"],
+                    "trust_score": g["header"]["trust_score"],
                 },
             }
         )
