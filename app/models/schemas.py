@@ -38,7 +38,7 @@ class Overview(BaseModel):
     primary_driver: PrimaryDriver
     metrics: Metrics
     neighbors: List[Neighbor]
-    max_plafon_recommendation: int
+    max_plafon_recommendation: Optional[int] = 0
 
 
 class Trends(BaseModel):
